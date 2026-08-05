@@ -20,3 +20,14 @@ repos:
       - id: bandit
         args: ["-c", "pyproject.toml"]
         additional_dependencies: ["bandit[toml]"]
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: env PYTHONDONTWRITEBYTECODE=1 uv run pytest -p no:cacheprovider
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
