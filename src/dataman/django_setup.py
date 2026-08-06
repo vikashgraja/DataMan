@@ -23,7 +23,9 @@ def setup():
             (migrations_dir / "__init__.py").touch()
 
     settings.configure(
+        SECRET_KEY="dataman-insecure-secret-key",  # nosec B106
         DEBUG=True,
+        ALLOWED_HOSTS=["*"],
         INSTALLED_APPS=[
             "django.contrib.admin",
             "django.contrib.auth",
@@ -34,6 +36,14 @@ def setup():
             "rest_framework",
             "dataman.core",
         ],
+        REST_FRAMEWORK={
+            "DEFAULT_AUTHENTICATION_CLASSES": [
+                "dataman.core.auth.ServiceTokenAuthentication",
+                "rest_framework.authentication.SessionAuthentication",
+            ],
+            # Permissions are left empty globally;
+            # we configure them dynamically per-table
+        },
         DATABASES={
             "default": {
                 "ENGINE": "django.db.backends.sqlite3",

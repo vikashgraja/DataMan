@@ -1,9 +1,32 @@
 import importlib
+import secrets
 import sys
 from pathlib import Path
 
 from django.db import models
 
+
+def generate_key():
+    return secrets.token_hex(20)
+
+
+class APIToken(models.Model):
+    """Service Token for DataMan API Access."""
+
+    key = models.CharField(max_length=40, primary_key=True, default=generate_key)
+    name = models.CharField(max_length=255)
+    scopes = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "dataman"
+        db_table = "dataman_apitoken"
+
+    def __str__(self):
+        return f"{self.name} ({self.key[:8]}...)"
+
+
+# Dynamic Model Loading
 cwd = Path.cwd()
 if str(cwd) not in sys.path:
     sys.path.insert(0, str(cwd))
