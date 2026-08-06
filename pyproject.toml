@@ -16,6 +16,11 @@ dependencies = [
 
 [project.scripts]
 dataman = "dataman.cli:cli"
+
+[tool.coverage.run]
+branch = true
+concurrency = ["multiprocessing"]
+sigterm = true
 [build-system]
 requires = ["uv_build>=0.10.6,<0.11.0"]
 build-backend = "uv_build"
@@ -25,6 +30,7 @@ dev = [
     "bandit>=1.9.4",
     "pre-commit>=4.6.1",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.16.1",
 ]
 

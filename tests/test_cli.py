@@ -73,29 +73,54 @@ def test_create_table_command(tmp_path):
 
 def test_migrations_commands(tmp_path):
     """Test that makemigration and migrate work correctly."""
-    runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
-        # 1. Initialize project
-        runner.invoke(cli, ["init"])
+    import subprocess
+    import sys
 
-        # 2. Create a table
-        runner.invoke(cli, ["create", "table", "Employee", "-o", "cr"])
+    # 1. Initialize project
+    subprocess.check_call(
+        [sys.executable, "-m", "dataman.cli", "init"], cwd=str(tmp_path)
+    )
 
-        # 3. Run makemigration
-        result_make = runner.invoke(cli, ["makemigration"])
-        assert result_make.exit_code == 0
-        assert "Migrations created successfully" in result_make.output
+    # 2. Create a table
+    subprocess.check_call(
+        [
+            sys.executable,
+            "-m",
+            "dataman.cli",
+            "create",
+            "table",
+            "Employee",
+            "-o",
+            "cr",
+        ],
+        cwd=str(tmp_path),
+    )
 
-        # Verify migration file exists
-        migrations_dir = Path("tables/migrations")
-        assert migrations_dir.exists()
-        migration_files = list(migrations_dir.glob("0001_initial.py"))
-        assert len(migration_files) == 1
+    # 3. Run makemigration
+    result_make = subprocess.run(
+        [sys.executable, "-m", "dataman.cli", "makemigration"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    assert result_make.returncode == 0
+    assert "Migrations created successfully" in result_make.stdout
 
-        # 4. Run migrate
-        result_migrate = runner.invoke(cli, ["migrate"])
-        assert result_migrate.exit_code == 0
-        assert "Database migrated successfully" in result_migrate.output
+    # Verify migration file exists
+    migrations_dir = tmp_path / "tables" / "migrations"
+    assert migrations_dir.exists()
+    migration_files = list(migrations_dir.glob("0001_initial.py"))
+    assert len(migration_files) == 1
 
-        # Verify db.sqlite3 is created
-        assert Path("db.sqlite3").exists()
+    # 4. Run migrate
+    result_migrate = subprocess.run(
+        [sys.executable, "-m", "dataman.cli", "migrate"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    assert result_migrate.returncode == 0
+    assert "Database migrated successfully" in result_migrate.stdout
+
+    # Verify db.sqlite3 is created
+    assert (tmp_path / "db.sqlite3").exists()

@@ -30,34 +30,39 @@ def test_server_start_command(tmp_path):
 
 def test_dynamic_urls(tmp_path):
     """Test that urls.py dynamically discovers models and generates endpoints."""
-    # We test this by initializing the Django setup and importing urls.py
-    runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
-        runner.invoke(cli, ["init"])
-        runner.invoke(cli, ["create", "table", "Customer", "-o", "c"])
+    import subprocess
+    import sys
 
-        # We need to setup Django to test URLs
-        from dataman import django_setup
+    # 1. Initialize project and create table
+    subprocess.check_call(
+        [sys.executable, "-m", "dataman.cli", "init"], cwd=str(tmp_path)
+    )
+    subprocess.check_call(
+        [sys.executable, "-m", "dataman.cli", "create", "table", "Customer", "-o", "c"],
+        cwd=str(tmp_path),
+    )
 
-        django_setup.setup()
+    script = """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
 
-        from dataman.core import urls
+from dataman import django_setup
+django_setup.setup()
 
-        # We should have an admin route and an API route for customer
-        # The DRF router should have registered api/customer
-        # Depending on DRF version, router.registry is a list of tuples
-        # (prefix, viewset, basename)
-        prefixes = [r[0] for r in urls.router.registry]
+from dataman.core import urls
 
-        assert "api/employee" in prefixes
+prefixes = [r[0] for r in urls.router.registry]
+assert "api/customer" in prefixes
 
-        # The ViewSet should have "post", "get", "head", "options"
-        # since operations was "cr"
-        # Find the employee viewset
-        employee_viewset = next(
-            r[1] for r in urls.router.registry if r[0] == "api/employee"
-        )
-        assert "post" in employee_viewset.http_method_names
-        assert "get" in employee_viewset.http_method_names
-        assert "put" not in employee_viewset.http_method_names
-        assert "delete" not in employee_viewset.http_method_names
+customer_viewset = next(
+    r[1] for r in urls.router.registry if r[0] == "api/customer"
+)
+assert "post" in customer_viewset.http_method_names
+assert "get" not in customer_viewset.http_method_names
+assert "put" not in customer_viewset.http_method_names
+assert "delete" not in customer_viewset.http_method_names
+print("SUCCESS")
+"""
+    (tmp_path / "run_test.py").write_text(script)
+    subprocess.check_call([sys.executable, "run_test.py"], cwd=str(tmp_path))
