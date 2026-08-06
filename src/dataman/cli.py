@@ -1,6 +1,9 @@
 from pathlib import Path
 
 import click
+from django.core.management import call_command
+
+from dataman import django_setup
 
 
 @click.group()
@@ -111,6 +114,7 @@ def create_table(table_name: str, operations: str):
             f"    # Define your fields here, for example:\n"
             f"    # name = models.CharField(max_length=255)\n\n"
             f"    class Meta:\n"
+            f'        app_label = "dataman"\n'
             f'        db_table = "{db_table_name}"\n'
         )
 
@@ -143,6 +147,29 @@ def create_table(table_name: str, operations: str):
             fg="green",
         )
     )
+
+
+@cli.command()
+def makemigration():
+    """Create new migrations based on the models you have defined."""
+    django_setup.setup()
+    try:
+        call_command("makemigrations", "dataman")
+        click.echo(click.style("Migrations created successfully!", fg="green"))
+    except SystemExit as e:
+        # Django's call_command might call sys.exit if there's an error
+        raise click.Abort() from e
+
+
+@cli.command()
+def migrate():
+    """Apply migrations to the database."""
+    django_setup.setup()
+    try:
+        call_command("migrate")
+        click.echo(click.style("Database migrated successfully!", fg="green"))
+    except SystemExit as e:
+        raise click.Abort() from e
 
 
 if __name__ == "__main__":

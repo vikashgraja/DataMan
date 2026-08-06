@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .DS_Store
+
+# testing
+test_project/
+scratch/

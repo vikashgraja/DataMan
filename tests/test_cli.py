@@ -69,3 +69,33 @@ def test_create_table_command(tmp_path):
         assert (table_dir / "validation.py").exists()
         assert (table_dir / "service.py").exists()
         assert (table_dir / "analytics.py").exists()
+
+
+def test_migrations_commands(tmp_path):
+    """Test that makemigration and migrate work correctly."""
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        # 1. Initialize project
+        runner.invoke(cli, ["init"])
+
+        # 2. Create a table
+        runner.invoke(cli, ["create", "table", "Employee", "-o", "cr"])
+
+        # 3. Run makemigration
+        result_make = runner.invoke(cli, ["makemigration"])
+        assert result_make.exit_code == 0
+        assert "Migrations created successfully" in result_make.output
+
+        # Verify migration file exists
+        migrations_dir = Path("tables/migrations")
+        assert migrations_dir.exists()
+        migration_files = list(migrations_dir.glob("0001_initial.py"))
+        assert len(migration_files) == 1
+
+        # 4. Run migrate
+        result_migrate = runner.invoke(cli, ["migrate"])
+        assert result_migrate.exit_code == 0
+        assert "Database migrated successfully" in result_migrate.output
+
+        # Verify db.sqlite3 is created
+        assert Path("db.sqlite3").exists()
