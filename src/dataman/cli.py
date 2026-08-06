@@ -172,5 +172,28 @@ def migrate():
         raise click.Abort() from e
 
 
+@cli.group()
+def server():
+    """Manage the DataMan server."""
+    pass
+
+
+@server.command()
+def start():
+    """Start the DataMan API server."""
+    django_setup.setup()
+    try:
+        click.echo(
+            click.style(
+                "Starting DataMan server at http://127.0.0.1:8000/",
+                fg="green",
+                bold=True,
+            )
+        )
+        call_command("runserver", "127.0.0.1:8000", use_reloader=False)
+    except SystemExit as e:
+        raise click.Abort() from e
+
+
 if __name__ == "__main__":
     cli()
