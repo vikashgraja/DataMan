@@ -62,5 +62,5 @@ def test_auth_scaffold_and_token_creation(tmp_path):
         from dataman.core.models import APIToken
 
         token = APIToken.objects.get(name="ReadOnlyService")
-        assert token.key in result.output
+        assert token.prefix in result.output
         assert token.scopes == ["customer:read"]

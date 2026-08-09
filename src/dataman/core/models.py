@@ -13,7 +13,8 @@ def generate_key():
 class APIToken(models.Model):
     """Service Token for DataMan API Access."""
 
-    key = models.CharField(max_length=40, primary_key=True, default=generate_key)
+    prefix = models.CharField(max_length=8, unique=True)
+    hashed_secret = models.CharField(max_length=128)
     name = models.CharField(max_length=255)
     scopes = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -23,13 +24,13 @@ class APIToken(models.Model):
         db_table = "dataman_apitoken"
 
     def __str__(self):
-        return f"{self.name} ({self.key[:8]}...)"
+        return f"{self.name} ({self.prefix}...)"
 
 
 # Dynamic Model Loading
 cwd = Path.cwd()
 if str(cwd) not in sys.path:
-    sys.path.insert(0, str(cwd))
+    sys.path.append(str(cwd))
 
 tables_dir = cwd / "tables"
 

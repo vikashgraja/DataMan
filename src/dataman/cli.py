@@ -17,18 +17,20 @@ def init():
     """Initialize a new DataMan project in the current directory."""
     cwd = Path.cwd()
 
-    # Create .env.example file
-    env_path = cwd / ".env.example"
+    # Create .env file
+    env_path = cwd / ".env"
     if not env_path.exists():
+        import secrets
+
+        secret_key = secrets.token_urlsafe(50)
         with open(env_path, "w") as f:
             f.write("DEBUG=True\n")
-            f.write("DATAMAN_SECRET_KEY=insecure-default-key-please-change\n")
+            f.write(f"DATAMAN_SECRET_KEY={secret_key}\n")
             f.write("DATABASE_URL=sqlite:///db.sqlite3\n")
-        click.echo(click.style("Created .env.example file.", fg="green"))
+            f.write("ALLOWED_HOSTS=*\n")
+        click.echo(click.style("Created .env file.", fg="green"))
     else:
-        click.echo(
-            click.style(".env.example file already exists, skipping.", fg="yellow")
-        )
+        click.echo(click.style(".env file already exists, skipping.", fg="yellow"))
 
     # Create tables directory
     tables_dir = cwd / "tables"
@@ -227,15 +229,30 @@ def create_token(name, scopes):
     """Generate an API Service Token with specific scopes."""
     django_setup.setup()
     import json
+    import secrets
+
+    from django.contrib.auth.hashers import make_password
 
     from dataman.core.models import APIToken
 
     scope_list = [s.strip() for s in scopes.split(",")]
 
-    token = APIToken.objects.create(name=name, scopes=scope_list)
+    prefix = secrets.token_hex(4)
+    secret = secrets.token_hex(16)
+    hashed_secret = make_password(secret)
+
+    APIToken.objects.create(
+        name=name, scopes=scope_list, prefix=prefix, hashed_secret=hashed_secret
+    )
     click.echo(f"Created new token: {name}")
     click.echo(f"Scopes: {json.dumps(scope_list)}")
-    click.echo(click.style(f"Token Key: {token.key}", fg="green", bold=True))
+    click.echo(click.style(f"Token Key: {prefix}_{secret}", fg="green", bold=True))
+    click.echo(
+        click.style(
+            "Please save this token key securely. It will not be shown again.",
+            fg="yellow",
+        )
+    )
 
 
 if __name__ == "__main__":

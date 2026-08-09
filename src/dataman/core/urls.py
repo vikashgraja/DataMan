@@ -12,6 +12,9 @@ try:
     for model in dataman_app.get_models():
         model_name = model.__name__
 
+        if model_name == "APIToken":
+            continue
+
         # Read operations from config
         ops = ["C", "R", "U", "D"]
         require_auth = False
@@ -21,14 +24,14 @@ try:
                 ops = config_module.ALLOWED_OPERATIONS
             if hasattr(config_module, "REQUIRE_AUTH"):
                 require_auth = config_module.REQUIRE_AUTH
-        except Exception:
+        except ModuleNotFoundError:
             pass  # nosec B110
 
-        http_methods = []
+        http_methods = ["options"]
         if "C" in ops:
             http_methods.extend(["post"])
         if "R" in ops:
-            http_methods.extend(["get", "head", "options"])
+            http_methods.extend(["get", "head"])
         if "U" in ops:
             http_methods.extend(["put", "patch"])
         if "D" in ops:
@@ -99,7 +102,7 @@ try:
             if s_mod and hasattr(s_mod, "before_destroy"):
                 s_mod.before_destroy(instance)
 
-            super(self.__class__, self).perform_destroy(instance)
+            viewsets.ModelViewSet.perform_destroy(self, instance)
 
             if s_mod and hasattr(s_mod, "after_destroy"):
                 s_mod.after_destroy(instance)

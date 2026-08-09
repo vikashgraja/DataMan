@@ -51,11 +51,25 @@ call_command("makemigrations")
 call_command("migrate")
 
 from dataman.core.models import APIToken
-token = APIToken.objects.create(name="test", scopes=["*"])
+from django.contrib.auth.hashers import make_password
+
+read_prefix, read_secret = "rprefix", "rsecret"
+token = APIToken.objects.create(
+    name="test",
+    scopes=[
+        "customer:read",
+        "customer:create",
+        "customer:update",
+        "customer:delete",
+    ],
+    prefix=read_prefix,
+    hashed_secret=make_password(read_secret),
+)
+raw_token = f"{read_prefix}_{read_secret}"
 
 from rest_framework.test import APIClient
 client = APIClient()
-client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
+client.credentials(HTTP_AUTHORIZATION="Token " + raw_token)
 
 response = client.post("/api/customer/", {"name": "John Doe"}, format="json")
 assert response.status_code == 201, f"Expected 201, got {response.status_code}"

@@ -1,8 +1,10 @@
+import os
 import sys
 from pathlib import Path
 
 import django
 from django.conf import settings
+from dotenv import load_dotenv
 
 
 def setup():
@@ -12,7 +14,12 @@ def setup():
 
     cwd = Path.cwd()
     if str(cwd) not in sys.path:
-        sys.path.insert(0, str(cwd))
+        sys.path.append(str(cwd))
+
+    # Load environment variables
+    env_path = cwd / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
 
     # Ensure tables directory exists for migrations
     tables_dir = cwd / "tables"
@@ -22,10 +29,14 @@ def setup():
             migrations_dir.mkdir()
             (migrations_dir / "__init__.py").touch()
 
+    # Parse allowed hosts
+    allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "*")
+    allowed_hosts = [h.strip() for h in allowed_hosts_env.split(",") if h.strip()]
+
     settings.configure(
-        SECRET_KEY="dataman-insecure-secret-key",  # nosec B106
-        DEBUG=True,
-        ALLOWED_HOSTS=["*"],
+        SECRET_KEY=os.getenv("DATAMAN_SECRET_KEY", "dataman-insecure-secret-key"),
+        DEBUG=os.getenv("DEBUG", "True").lower() in ("true", "1", "yes"),
+        ALLOWED_HOSTS=allowed_hosts,
         INSTALLED_APPS=[
             "django.contrib.admin",
             "django.contrib.auth",

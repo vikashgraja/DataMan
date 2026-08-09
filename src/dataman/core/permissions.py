@@ -22,7 +22,6 @@ class HasTableScope(permissions.BasePermission):
         if "*" in token.scopes:
             return True
 
-        # Determine required scope from view (e.g. view.basename + ":" + method)
         table_name = getattr(view, "basename", "").lower()
         method = request.method.lower()
 

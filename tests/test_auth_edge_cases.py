@@ -39,8 +39,30 @@ call_command("makemigrations")
 call_command("migrate")
 
 from dataman.core.models import APIToken
-read_token = APIToken.objects.create(name="read_only", scopes=["order:read"])
-write_token = APIToken.objects.create(name="write_only", scopes=["order:write"])
+from django.contrib.auth.hashers import make_password
+
+read_prefix, read_secret = "rprefix", "rsecret"
+read_token = APIToken.objects.create(
+    name="read_only",
+    scopes=["order:read"],
+    prefix=read_prefix,
+    hashed_secret=make_password(read_secret),
+)
+raw_read_token = f"{read_prefix}_{read_secret}"
+
+write_prefix, write_secret = "wprefix", "wsecret"
+write_token = APIToken.objects.create(
+    name="write_only",
+    scopes=["order:write"],
+    prefix=write_prefix,
+    hashed_secret=make_password(write_secret),
+)
+raw_write_token = f"{write_prefix}_{write_secret}"
+
+print(
+    f"DEBUG SCRIPT: read_prefix={read_prefix}, "
+    f"all tokens={[t.prefix for t in APIToken.objects.all()]}"
+)
 
 from rest_framework.test import APIClient
 client = APIClient()
@@ -50,7 +72,7 @@ r1 = client.get("/api/order/")
 assert r1.status_code == 403
 
 # 2. Bad token format -> 403 Forbidden
-client.credentials(HTTP_AUTHORIZATION="Bearer " + read_token.key)
+client.credentials(HTTP_AUTHORIZATION="Bearer " + raw_read_token)
 r2 = client.get("/api/order/")
 assert r2.status_code == 403
 
@@ -60,14 +82,14 @@ r3 = client.get("/api/order/")
 assert r3.status_code == 403
 
 # 4. Valid read token, tries to POST -> 403
-client.credentials(HTTP_AUTHORIZATION="Token " + read_token.key)
+client.credentials(HTTP_AUTHORIZATION="Token " + raw_read_token)
 r4_get = client.get("/api/order/")
 assert r4_get.status_code == 200
 r4_post = client.post("/api/order/", {}, format="json")
 assert r4_post.status_code == 403
 
 # 5. Valid write token, tries to GET -> 403
-client.credentials(HTTP_AUTHORIZATION="Token " + write_token.key)
+client.credentials(HTTP_AUTHORIZATION="Token " + raw_write_token)
 r5_post = client.post("/api/order/", {}, format="json")
 assert r5_post.status_code == 201
 r5_get = client.get("/api/order/")
