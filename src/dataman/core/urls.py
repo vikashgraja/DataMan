@@ -1,11 +1,31 @@
 import importlib
+import threading
 
+import requests
 from django.apps import apps
 from django.contrib import admin
 from django.urls import include, path
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import routers, serializers, viewsets
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.pagination import PageNumberPagination
 
 router = routers.DefaultRouter()
+
+
+def dispatch_webhook(url, action, table_name, data):
+    def _fire():
+        try:
+            requests.post(
+                url,
+                json={"action": action, "table": table_name, "data": data},
+                timeout=5,
+            )
+        except Exception as e:
+            print(f"Webhook error for {table_name}: {e}")
+
+    threading.Thread(target=_fire, daemon=True).start()
+
 
 try:
     dataman_app = apps.get_app_config("dataman")
@@ -18,12 +38,27 @@ try:
         # Read operations from config
         ops = ["C", "R", "U", "D"]
         require_auth = False
+        page_size = None
+        filter_fields = []
+        search_fields = []
+        ordering_fields = []
+        webhook_url = None
         try:
             config_module = importlib.import_module(f"tables.{model_name}.config")
             if hasattr(config_module, "ALLOWED_OPERATIONS"):
                 ops = config_module.ALLOWED_OPERATIONS
             if hasattr(config_module, "REQUIRE_AUTH"):
                 require_auth = config_module.REQUIRE_AUTH
+            if hasattr(config_module, "PAGE_SIZE"):
+                page_size = config_module.PAGE_SIZE
+            if hasattr(config_module, "FILTER_FIELDS"):
+                filter_fields = config_module.FILTER_FIELDS
+            if hasattr(config_module, "SEARCH_FIELDS"):
+                search_fields = config_module.SEARCH_FIELDS
+            if hasattr(config_module, "ORDERING_FIELDS"):
+                ordering_fields = config_module.ORDERING_FIELDS
+            if hasattr(config_module, "WEBHOOK_URL"):
+                webhook_url = config_module.WEBHOOK_URL
         except ModuleNotFoundError:
             pass  # nosec B110
 
@@ -80,7 +115,9 @@ try:
             permission_classes = [AllowAny]
 
         # Viewset service hooks
-        def custom_perform_create(self, serializer, s_mod=service_module):
+        def custom_perform_create(
+            self, serializer, s_mod=service_module, w_url=webhook_url, t_name=model_name
+        ):
             if s_mod and hasattr(s_mod, "before_create"):
                 s_mod.before_create(serializer.validated_data)
 
@@ -89,7 +126,18 @@ try:
             if s_mod and hasattr(s_mod, "after_create"):
                 s_mod.after_create(instance)
 
-        def custom_perform_update(self, serializer, s_mod=service_module):
+            if w_url:
+                data = (
+                    serializer.data
+                    if isinstance(serializer.data, list)
+                    else [serializer.data]
+                )
+                for item in data:
+                    dispatch_webhook(w_url, "create", t_name, item)
+
+        def custom_perform_update(
+            self, serializer, s_mod=service_module, w_url=webhook_url, t_name=model_name
+        ):
             if s_mod and hasattr(s_mod, "before_update"):
                 s_mod.before_update(serializer.instance, serializer.validated_data)
 
@@ -98,7 +146,14 @@ try:
             if s_mod and hasattr(s_mod, "after_update"):
                 s_mod.after_update(instance)
 
-        def custom_perform_destroy(self, instance, s_mod=service_module):
+            if w_url:
+                dispatch_webhook(w_url, "update", t_name, serializer.data)
+
+        def custom_perform_destroy(
+            self, instance, s_mod=service_module, w_url=webhook_url, t_name=model_name
+        ):
+            data_to_send = {"id": getattr(instance, "id", None)} if w_url else None
+
             if s_mod and hasattr(s_mod, "before_destroy"):
                 s_mod.before_destroy(instance)
 
@@ -107,19 +162,58 @@ try:
             if s_mod and hasattr(s_mod, "after_destroy"):
                 s_mod.after_destroy(instance)
 
+            if w_url:
+                dispatch_webhook(w_url, "destroy", t_name, data_to_send)
+
+        viewset_attrs = {
+            "queryset": model.objects.all(),
+            "serializer_class": serializer_class,
+            "http_method_names": http_methods,
+            "permission_classes": permission_classes,
+            "perform_create": custom_perform_create,
+            "perform_update": custom_perform_update,
+            "perform_destroy": custom_perform_destroy,
+        }
+
+        # Bulk creation support
+        def custom_get_serializer(self, *args, **kwargs):
+            if isinstance(kwargs.get("data", {}), list):
+                kwargs["many"] = True
+            return viewsets.ModelViewSet.get_serializer(self, *args, **kwargs)
+
+        viewset_attrs["get_serializer"] = custom_get_serializer
+
+        # Pagination
+        if page_size:
+
+            class CustomPagination(PageNumberPagination):
+                page_size_val = page_size
+
+                def get_page_size(self, request):
+                    return self.page_size_val
+
+            viewset_attrs["pagination_class"] = CustomPagination
+
+        # Filtering, Searching, Ordering
+        filter_backends = []
+        if filter_fields:
+            filter_backends.append(DjangoFilterBackend)
+            viewset_attrs["filterset_fields"] = filter_fields
+        if search_fields:
+            filter_backends.append(SearchFilter)
+            viewset_attrs["search_fields"] = search_fields
+        if ordering_fields:
+            filter_backends.append(OrderingFilter)
+            viewset_attrs["ordering_fields"] = ordering_fields
+
+        if filter_backends:
+            viewset_attrs["filter_backends"] = filter_backends
+
         # Generate ViewSet
         viewset_class = type(
             f"{model_name}ViewSet",
             (viewsets.ModelViewSet,),
-            {
-                "queryset": model.objects.all(),
-                "serializer_class": serializer_class,
-                "http_method_names": http_methods,
-                "permission_classes": permission_classes,
-                "perform_create": custom_perform_create,
-                "perform_update": custom_perform_update,
-                "perform_destroy": custom_perform_destroy,
-            },
+            viewset_attrs,
         )
 
         router.register(f"api/{model_name.lower()}", viewset_class)
