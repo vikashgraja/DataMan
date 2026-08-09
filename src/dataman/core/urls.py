@@ -6,9 +6,15 @@ from django.apps import apps
 from django.contrib import admin
 from django.urls import include, path
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 from rest_framework import routers, serializers, viewsets
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.throttling import ScopedRateThrottle
 
 router = routers.DefaultRouter()
 
@@ -43,6 +49,7 @@ try:
         search_fields = []
         ordering_fields = []
         webhook_url = None
+        rate_limit = None
         try:
             config_module = importlib.import_module(f"tables.{model_name}.config")
             if hasattr(config_module, "ALLOWED_OPERATIONS"):
@@ -59,6 +66,8 @@ try:
                 ordering_fields = config_module.ORDERING_FIELDS
             if hasattr(config_module, "WEBHOOK_URL"):
                 webhook_url = config_module.WEBHOOK_URL
+            if hasattr(config_module, "RATE_LIMIT"):
+                rate_limit = config_module.RATE_LIMIT
         except ModuleNotFoundError:
             pass  # nosec B110
 
@@ -89,8 +98,24 @@ try:
         # Generate Serializer with validation hook
         def custom_validate(self, data, v_mod=validation_module):
             data = super(self.__class__, self).validate(data)
-            if v_mod and hasattr(v_mod, "validate"):
-                return v_mod.validate(data)
+            if v_mod:
+                if hasattr(v_mod, "Schema"):
+                    try:
+                        parsed = v_mod.Schema(**data)
+                        if hasattr(parsed, "model_dump"):
+                            data = parsed.model_dump()
+                        else:
+                            data = parsed.dict()
+                    except Exception as e:
+                        if e.__class__.__name__ == "ValidationError":
+                            from rest_framework.exceptions import (
+                                ValidationError as DRFValidationError,
+                            )
+
+                            raise DRFValidationError(e.errors()) from e
+                        raise
+                elif hasattr(v_mod, "validate"):
+                    return v_mod.validate(data)
             return data
 
         class Meta:
@@ -209,6 +234,20 @@ try:
         if filter_backends:
             viewset_attrs["filter_backends"] = filter_backends
 
+        # Rate Limiting
+        if rate_limit:
+
+            class CustomThrottle(ScopedRateThrottle):
+                scope = f"{model_name.lower()}_throttle"
+                THROTTLE_RATES = {scope: rate_limit}
+
+                def __init__(self):
+                    self.THROTTLE_RATES = CustomThrottle.THROTTLE_RATES
+                    super().__init__()
+
+            viewset_attrs["throttle_classes"] = [CustomThrottle]
+            viewset_attrs["throttle_scope"] = f"{model_name.lower()}_throttle"
+
         # Generate ViewSet
         viewset_class = type(
             f"{model_name}ViewSet",
@@ -223,4 +262,11 @@ except LookupError:
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include(router.urls)),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/docs/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 ]

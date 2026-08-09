@@ -45,6 +45,7 @@ def setup():
             "django.contrib.messages",
             "django.contrib.staticfiles",
             "rest_framework",
+            "drf_spectacular",
             "dataman.core",
         ],
         REST_FRAMEWORK={
@@ -56,6 +57,9 @@ def setup():
                 "rest_framework.pagination.PageNumberPagination"
             ),
             "PAGE_SIZE": 100,
+            "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+            # Throttling is applied per-viewset dynamically based on config,
+            # but we define a default cache here if none provided.
             # Permissions are left empty globally;
             # we configure them dynamically per-table
         },
