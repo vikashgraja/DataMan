@@ -27,6 +27,8 @@ def test_auth_edge_cases(tmp_path):
         )
 
         script = """
+import os
+os.environ["ALLOWED_HOSTS"] = "*"
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path.cwd()))
@@ -39,14 +41,14 @@ call_command("makemigrations")
 call_command("migrate")
 
 from dataman.core.models import APIToken
-from django.contrib.auth.hashers import make_password
+import hashlib
 
 read_prefix, read_secret = "rprefix", "rsecret"
 read_token = APIToken.objects.create(
     name="read_only",
     scopes=["order:read"],
     prefix=read_prefix,
-    hashed_secret=make_password(read_secret),
+    hashed_secret=hashlib.sha256(read_secret.encode()).hexdigest(),
 )
 raw_read_token = f"{read_prefix}_{read_secret}"
 
@@ -55,7 +57,7 @@ write_token = APIToken.objects.create(
     name="write_only",
     scopes=["order:write"],
     prefix=write_prefix,
-    hashed_secret=make_password(write_secret),
+    hashed_secret=hashlib.sha256(write_secret.encode()).hexdigest(),
 )
 raw_write_token = f"{write_prefix}_{write_secret}"
 

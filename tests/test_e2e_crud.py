@@ -14,12 +14,24 @@ def test_e2e_crud_with_field_types_and_pagination(tmp_path):
     """
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
-        # 1. Initialize
         runner.invoke(cli, ["init"])
+
+        env_path = Path(".env")
+        env_path.write_text(
+            env_path.read_text().replace("ALLOWED_HOSTS=\n", "ALLOWED_HOSTS=*\n")
+        )
 
         # 2. Scaffold Category and Product tables
         runner.invoke(cli, ["create", "table", "Category", "-o", "crud"])
         runner.invoke(cli, ["create", "table", "Product", "-o", "crud"])
+
+        for table in ["Category", "Product"]:
+            config = Path(f"tables/{table}/config.py")
+            config.write_text(
+                config.read_text().replace(
+                    "REQUIRE_AUTH = True", "REQUIRE_AUTH = False"
+                )
+            )
 
         # 3. Add complex fields to models
         cat_model = Path("tables/Category/model.py")
@@ -44,6 +56,8 @@ def test_e2e_crud_with_field_types_and_pagination(tmp_path):
 
         # 4. Test script to run in subprocess
         script = """
+import os
+os.environ["ALLOWED_HOSTS"] = "*"
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path.cwd()))

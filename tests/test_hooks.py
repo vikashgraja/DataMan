@@ -12,8 +12,18 @@ def test_validation_and_service_hooks(tmp_path):
     with runner.isolated_filesystem(temp_dir=tmp_path):
         runner.invoke(cli, ["init"])
 
+        env_path = Path(".env")
+        env_path.write_text(
+            env_path.read_text().replace("ALLOWED_HOSTS=\n", "ALLOWED_HOSTS=*\n")
+        )
+
         # Create table
         runner.invoke(cli, ["create", "table", "Customer", "-o", "crud"])
+
+        config = Path("tables/Customer/config.py")
+        config.write_text(
+            config.read_text().replace("REQUIRE_AUTH = True", "REQUIRE_AUTH = False")
+        )
 
         # Modify model.py to add name field
         model_path = Path("tables/Customer/model.py")
@@ -39,6 +49,8 @@ def test_validation_and_service_hooks(tmp_path):
         )
 
         script = """
+import os
+os.environ["ALLOWED_HOSTS"] = "*"
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path.cwd()))
@@ -51,7 +63,7 @@ call_command("makemigrations")
 call_command("migrate")
 
 from dataman.core.models import APIToken
-from django.contrib.auth.hashers import make_password
+import hashlib
 
 read_prefix, read_secret = "rprefix", "rsecret"
 token = APIToken.objects.create(
@@ -63,7 +75,7 @@ token = APIToken.objects.create(
         "customer:delete",
     ],
     prefix=read_prefix,
-    hashed_secret=make_password(read_secret),
+    hashed_secret=hashlib.sha256(read_secret.encode()).hexdigest(),
 )
 raw_token = f"{read_prefix}_{read_secret}"
 
@@ -72,6 +84,7 @@ client = APIClient()
 client.credentials(HTTP_AUTHORIZATION="Token " + raw_token)
 
 response = client.post("/api/customer/", {"name": "John Doe"}, format="json")
+print("RESPONSE:", response.content)
 assert response.status_code == 201, f"Expected 201, got {response.status_code}"
 assert response.data["name"] == "VALIDATED_John Doe_SERVICED"
 print("SUCCESS")

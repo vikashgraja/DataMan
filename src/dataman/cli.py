@@ -1,6 +1,8 @@
+import re
 from pathlib import Path
 
 import click
+import inflection
 from django.core.management import call_command
 
 from dataman import django_setup
@@ -24,10 +26,10 @@ def init():
 
         secret_key = secrets.token_urlsafe(50)
         with open(env_path, "w") as f:
-            f.write("DEBUG=True\n")
+            f.write("DEBUG=False\n")
             f.write(f"DATAMAN_SECRET_KEY={secret_key}\n")
             f.write("DATABASE_URL=sqlite:///db.sqlite3\n")
-            f.write("ALLOWED_HOSTS=*\n")
+            f.write("ALLOWED_HOSTS=\n")
         click.echo(click.style("Created .env file.", fg="green"))
     else:
         click.echo(click.style(".env file already exists, skipping.", fg="yellow"))
@@ -67,6 +69,18 @@ def create():
 )
 def create_table(table_name: str, operations: str):
     """Scaffold a new table structure."""
+    if not re.match(r"^[a-zA-Z0-9_]+$", table_name):
+        click.echo(
+            click.style(
+                "Error: Invalid table name. "
+                "Use only alphanumeric characters and underscores.",
+                fg="red",
+            )
+        )
+        raise click.Abort()
+
+    table_name = inflection.camelize(table_name)
+
     cwd = Path.cwd()
     tables_dir = cwd / "tables"
 
@@ -103,7 +117,7 @@ def create_table(table_name: str, operations: str):
             f"# Allowed operations for this endpoint\n"
             f"ALLOWED_OPERATIONS = {ops_list}\n\n"
             f"# Set to True to require token authentication for this endpoint\n"
-            f"REQUIRE_AUTH = False\n\n"
+            f"REQUIRE_AUTH = True\n\n"
             f"# API Features & Capabilities\n"
             f"PAGE_SIZE = None\n"
             f"FILTER_FIELDS = []\n"
@@ -240,10 +254,9 @@ def create_admin():
 def create_token(name, scopes):
     """Generate an API Service Token with specific scopes."""
     django_setup.setup()
+    import hashlib
     import json
     import secrets
-
-    from django.contrib.auth.hashers import make_password
 
     from dataman.core.models import APIToken
 
@@ -251,7 +264,7 @@ def create_token(name, scopes):
 
     prefix = secrets.token_hex(4)
     secret = secrets.token_hex(16)
-    hashed_secret = make_password(secret)
+    hashed_secret = hashlib.sha256(secret.encode()).hexdigest()
 
     APIToken.objects.create(
         name=name, scopes=scope_list, prefix=prefix, hashed_secret=hashed_secret

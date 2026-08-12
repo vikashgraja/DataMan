@@ -1,5 +1,6 @@
+import concurrent.futures
 import importlib
-import threading
+import logging
 
 import requests
 from django.apps import apps
@@ -11,26 +12,39 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from requests.adapters import HTTPAdapter
 from rest_framework import routers, serializers, viewsets
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import ScopedRateThrottle
+from urllib3.util.retry import Retry
 
 router = routers.DefaultRouter()
+webhook_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 
 def dispatch_webhook(url, action, table_name, data):
     def _fire():
         try:
-            requests.post(
+            session = requests.Session()
+            retry = Retry(
+                total=3, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504]
+            )
+            adapter = HTTPAdapter(max_retries=retry)
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+
+            session.post(
                 url,
                 json={"action": action, "table": table_name, "data": data},
                 timeout=5,
             )
         except Exception as e:
-            print(f"Webhook error for {table_name}: {e}")
+            logging.getLogger("dataman.webhooks").error(
+                f"Webhook error for {table_name}: {e}"
+            )
 
-    threading.Thread(target=_fire, daemon=True).start()
+    webhook_executor.submit(_fire)
 
 
 try:
@@ -81,19 +95,23 @@ try:
         if "D" in ops:
             http_methods.extend(["delete"])
 
-        import contextlib
-
         # Try to load custom modules
         validation_module = None
         service_module = None
 
-        with contextlib.suppress(Exception):
+        try:
             validation_module = importlib.import_module(
                 f"tables.{model_name}.validation"
             )
+        except ImportError as e:
+            if f"tables.{model_name}.validation" not in str(e):
+                raise
 
-        with contextlib.suppress(Exception):
+        try:
             service_module = importlib.import_module(f"tables.{model_name}.service")
+        except ImportError as e:
+            if f"tables.{model_name}.service" not in str(e):
+                raise
 
         # Generate Serializer with validation hook
         def custom_validate(self, data, v_mod=validation_module):
@@ -140,55 +158,56 @@ try:
             permission_classes = [AllowAny]
 
         # Viewset service hooks
-        def custom_perform_create(
-            self, serializer, s_mod=service_module, w_url=webhook_url, t_name=model_name
-        ):
-            if s_mod and hasattr(s_mod, "before_create"):
-                s_mod.before_create(serializer.validated_data)
+        def make_hooks(s_mod, w_url, t_name):
+            def _create(self, serializer):
+                if s_mod and hasattr(s_mod, "before_create"):
+                    s_mod.before_create(serializer.validated_data)
 
-            instance = serializer.save()
+                instance = serializer.save()
 
-            if s_mod and hasattr(s_mod, "after_create"):
-                s_mod.after_create(instance)
+                if s_mod and hasattr(s_mod, "after_create"):
+                    s_mod.after_create(instance)
 
-            if w_url:
-                data = (
-                    serializer.data
-                    if isinstance(serializer.data, list)
-                    else [serializer.data]
-                )
-                for item in data:
-                    dispatch_webhook(w_url, "create", t_name, item)
+                if w_url:
+                    data = (
+                        serializer.data
+                        if isinstance(serializer.data, list)
+                        else [serializer.data]
+                    )
+                    for item in data:
+                        dispatch_webhook(w_url, "create", t_name, item)
 
-        def custom_perform_update(
-            self, serializer, s_mod=service_module, w_url=webhook_url, t_name=model_name
-        ):
-            if s_mod and hasattr(s_mod, "before_update"):
-                s_mod.before_update(serializer.instance, serializer.validated_data)
+            def _update(self, serializer):
+                if s_mod and hasattr(s_mod, "before_update"):
+                    s_mod.before_update(serializer.instance, serializer.validated_data)
 
-            instance = serializer.save()
+                instance = serializer.save()
 
-            if s_mod and hasattr(s_mod, "after_update"):
-                s_mod.after_update(instance)
+                if s_mod and hasattr(s_mod, "after_update"):
+                    s_mod.after_update(instance)
 
-            if w_url:
-                dispatch_webhook(w_url, "update", t_name, serializer.data)
+                if w_url:
+                    dispatch_webhook(w_url, "update", t_name, serializer.data)
 
-        def custom_perform_destroy(
-            self, instance, s_mod=service_module, w_url=webhook_url, t_name=model_name
-        ):
-            data_to_send = {"id": getattr(instance, "id", None)} if w_url else None
+            def _destroy(self, instance):
+                data_to_send = {"id": getattr(instance, "id", None)} if w_url else None
 
-            if s_mod and hasattr(s_mod, "before_destroy"):
-                s_mod.before_destroy(instance)
+                if s_mod and hasattr(s_mod, "before_destroy"):
+                    s_mod.before_destroy(instance)
 
-            viewsets.ModelViewSet.perform_destroy(self, instance)
+                viewsets.ModelViewSet.perform_destroy(self, instance)
 
-            if s_mod and hasattr(s_mod, "after_destroy"):
-                s_mod.after_destroy(instance)
+                if s_mod and hasattr(s_mod, "after_destroy"):
+                    s_mod.after_destroy(instance)
 
-            if w_url:
-                dispatch_webhook(w_url, "destroy", t_name, data_to_send)
+                if w_url:
+                    dispatch_webhook(w_url, "destroy", t_name, data_to_send)
+
+            return _create, _update, _destroy
+
+        custom_perform_create, custom_perform_update, custom_perform_destroy = (
+            make_hooks(service_module, webhook_url, model_name)
+        )
 
         viewset_attrs = {
             "queryset": model.objects.all(),

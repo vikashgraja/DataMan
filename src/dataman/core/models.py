@@ -39,14 +39,6 @@ if tables_dir.exists():
         if d.is_dir() and (d / "model.py").exists():
             module_name = f"tables.{d.name}.model"
             try:
-                mod = importlib.import_module(module_name)
-                for attr_name in dir(mod):
-                    attr = getattr(mod, attr_name)
-                    if (
-                        isinstance(attr, type)
-                        and issubclass(attr, models.Model)
-                        and attr is not models.Model
-                    ):
-                        globals()[attr_name] = attr
+                importlib.import_module(module_name)
             except Exception as e:
                 print(f"Failed to load model from {module_name}: {e}")

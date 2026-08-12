@@ -29,13 +29,15 @@ def setup():
             migrations_dir.mkdir()
             (migrations_dir / "__init__.py").touch()
 
+    import dj_database_url
+
     # Parse allowed hosts
-    allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "*")
+    allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "")
     allowed_hosts = [h.strip() for h in allowed_hosts_env.split(",") if h.strip()]
 
     settings.configure(
         SECRET_KEY=os.getenv("DATAMAN_SECRET_KEY", "dataman-insecure-secret-key"),
-        DEBUG=os.getenv("DEBUG", "True").lower() in ("true", "1", "yes"),
+        DEBUG=os.getenv("DEBUG", "False").lower() in ("true", "1", "yes"),
         ALLOWED_HOSTS=allowed_hosts,
         INSTALLED_APPS=[
             "django.contrib.admin",
@@ -64,10 +66,10 @@ def setup():
             # we configure them dynamically per-table
         },
         DATABASES={
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": str(cwd / "db.sqlite3"),
-            }
+            "default": dj_database_url.config(
+                default=f"sqlite:///{cwd}/db.sqlite3",
+                conn_max_age=600,
+            )
         },
         MIGRATION_MODULES={"dataman": "tables.migrations"},
         ROOT_URLCONF="dataman.core.urls",

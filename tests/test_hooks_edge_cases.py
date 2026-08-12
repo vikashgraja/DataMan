@@ -14,7 +14,18 @@ def test_hooks_edge_cases(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         runner.invoke(cli, ["init"])
+
+        env_path = Path(".env")
+        env_path.write_text(
+            env_path.read_text().replace("ALLOWED_HOSTS=\n", "ALLOWED_HOSTS=*\n")
+        )
+
         runner.invoke(cli, ["create", "table", "Document", "-o", "crud"])
+
+        config = Path("tables/Document/config.py")
+        config.write_text(
+            config.read_text().replace("REQUIRE_AUTH = True", "REQUIRE_AUTH = False")
+        )
 
         # Add title field
         model_py = Path("tables/Document/model.py")
@@ -48,6 +59,8 @@ def test_hooks_edge_cases(tmp_path):
         )
 
         script = """
+import os
+os.environ["ALLOWED_HOSTS"] = "*"
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path.cwd()))

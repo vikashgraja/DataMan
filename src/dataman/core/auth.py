@@ -33,9 +33,10 @@ class ServiceTokenAuthentication(authentication.BaseAuthentication):
             prefix, secret = auth[1].split("_", 1)
             token = APIToken.objects.get(prefix=prefix)
 
-            from django.contrib.auth.hashers import check_password
+            import hashlib
 
-            if not check_password(secret, token.hashed_secret):
+            hashed_input = hashlib.sha256(secret.encode()).hexdigest()
+            if hashed_input != token.hashed_secret:
                 raise exceptions.AuthenticationFailed("Invalid token.")
         except (ValueError, APIToken.DoesNotExist) as e:
             raise exceptions.AuthenticationFailed("Invalid token.") from e
