@@ -25,11 +25,12 @@ def test_validation_and_service_hooks(tmp_path):
             config.read_text().replace("REQUIRE_AUTH = True", "REQUIRE_AUTH = False")
         )
 
-        # Modify model.py to add name field
-        model_path = Path("tables/Customer/model.py")
+        # Modify models.py to add name field
+        model_path = Path("tables/Customer/models.py")
         model_text = model_path.read_text().replace(
-            "# name = models.CharField(max_length=255)",
-            "name = models.CharField(max_length=255)",
+            "# Add your fields here",
+            "name = models.CharField(max_length=255)\n"
+            "    age = models.IntegerField(default=0)",
         )
         model_path.write_text(model_text)
 

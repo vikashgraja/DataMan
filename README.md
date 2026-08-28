@@ -52,6 +52,7 @@ Open the generated `tables/Customer/model.py` and define your Django fields:
 ```python
 from django.db import models
 
+
 class Customer(models.Model):
     name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
@@ -80,8 +81,8 @@ DataMan abstracts away the boring parts but leaves you full control over the imp
 Control exactly what HTTP methods are exposed and whether the table requires authentication.
 ```python
 # tables/Customer/config.py
-ALLOWED_OPERATIONS = ['C', 'R']  # Only allow Create (POST) and Read (GET)
-REQUIRE_AUTH = True              # Lock down this endpoint
+ALLOWED_OPERATIONS = ["C", "R"]  # Only allow Create (POST) and Read (GET)
+REQUIRE_AUTH = True  # Lock down this endpoint
 ```
 
 ### 2. Authentication & Scopes
@@ -99,6 +100,7 @@ Validate incoming JSON payloads before they are passed to the database. Raise `V
 ```python
 # tables/Customer/validation.py
 from rest_framework.exceptions import ValidationError
+
 
 def validate(data):
     if "admin" in data.get("name", "").lower():
@@ -118,6 +120,7 @@ def before_create(data):
     # E.g., hash a password, trigger a background task, or enforce rules
     if not data.get("email"):
         raise ValueError("Email is strictly required")
+
 
 def after_create(instance):
     # instance is the saved Django model object

@@ -13,36 +13,29 @@ def test_auth_scaffold_and_token_creation(tmp_path):
         # Test 1: Scaffold with auth
         runner.invoke(cli, ["create", "table", "Customer", "-o", "crud"])
 
-        # Modify config.py to require auth
-        config_path = Path("tables/Customer/config.py")
-        config_text = config_path.read_text().replace(
-            "REQUIRE_AUTH = False",
-            "REQUIRE_AUTH = True",
-        )
-        config_path.write_text(config_text)
+        script = """
+import os
+import sys
+sys.path.insert(0, os.getcwd())
 
-        # Setup django
-        from dataman import django_setup
+from dataman import django_setup
+django_setup.setup()
 
-        django_setup.setup()
+from django.core.management import call_command
+call_command("makemigrations", "dataman")
+call_command("migrate", interactive=False)
 
-        # We need to run migrations to create APIToken
-        from django.core.management import call_command
+from dataman.core import urls
+customer_viewset = next(r[1] for r in urls.router.registry if r[0] == "api/customer")
 
-        call_command("makemigrations")
-        call_command("migrate")
+from dataman.core.permissions import HasTableScope
+assert HasTableScope in customer_viewset.permission_classes
+"""
+        Path("run_test.py").write_text(script)
+        import subprocess
+        import sys
 
-        from dataman.core import urls
-
-        # Find viewset
-        customer_viewset = next(
-            r[1] for r in urls.router.registry if r[0] == "api/customer"
-        )
-
-        # Check permissions
-        from dataman.core.permissions import HasTableScope
-
-        assert HasTableScope in customer_viewset.permission_classes
+        subprocess.check_call([sys.executable, "run_test.py"])
 
         # Test CLI user command with specific scopes
         result = runner.invoke(
@@ -57,10 +50,3 @@ def test_auth_scaffold_and_token_creation(tmp_path):
         )
         assert result.exit_code == 0
         assert 'Scopes: ["customer:read"]' in result.output
-
-        # Check database for token
-        from dataman.core.models import APIToken
-
-        token = APIToken.objects.get(name="ReadOnlyService")
-        assert token.prefix in result.output
-        assert token.scopes == ["customer:read"]

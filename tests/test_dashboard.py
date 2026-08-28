@@ -42,7 +42,13 @@ call_command("makemigrations")
 call_command("migrate")
 
 from rest_framework.test import APIClient
+from django.contrib.auth.models import User
+
 client = APIClient()
+
+# Create a superuser for dashboard access
+User.objects.create_superuser("admin", "admin@example.com", "password")
+client.login(username="admin", password="password")
 
 # 1. Generate some traffic
 # These hit the API, which should be caught by APILoggingMiddleware

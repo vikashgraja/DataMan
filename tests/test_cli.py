@@ -22,7 +22,7 @@ def test_init_command(tmp_path):
         # Running init again should skip
         result2 = runner.invoke(cli, ["init"])
         assert result2.exit_code == 0
-        assert "skipping" in result2.output
+        assert "Project already initialized in this directory." in result2.output
 
 
 def test_create_table_command(tmp_path):
@@ -32,7 +32,10 @@ def test_create_table_command(tmp_path):
         # Must fail if tables/ doesn't exist
         result_fail = runner.invoke(cli, ["create", "table", "TestTable"])
         assert result_fail.exit_code != 0
-        assert "Error: tables/ directory not found" in result_fail.output
+        assert (
+            "Error: Not a DataMan project. Run 'dataman init' first."
+            in result_fail.output
+        )
 
         # Initialize project first
         runner.invoke(cli, ["init"])
@@ -50,9 +53,9 @@ def test_create_table_command(tmp_path):
         config_content = (table_dir / "config.py").read_text()
         assert "ALLOWED_OPERATIONS = ['C', 'R']" in config_content
 
-        model_content = (table_dir / "model.py").read_text()
+        model_content = (table_dir / "models.py").read_text()
         assert "class TestTable(models.Model):" in model_content
-        assert 'db_table = "test_table"' in model_content
+        assert "db_table = 'testtable'" in model_content
 
         assert (table_dir / "validation.py").exists()
         assert (table_dir / "service.py").exists()

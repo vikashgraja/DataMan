@@ -1,4 +1,4 @@
-import re
+import secrets
 from pathlib import Path
 
 import click
@@ -8,9 +8,20 @@ from django.core.management import call_command
 from dataman import django_setup
 
 
+def _ensure_initialized():
+    """Helper to ensure the current directory is a DataMan project."""
+    if not Path(".env").exists() or not Path("tables").is_dir():
+        click.echo(
+            click.style(
+                "Error: Not a DataMan project. Run 'dataman init' first.", fg="red"
+            )
+        )
+        raise click.Abort()
+
+
 @click.group()
 def cli():
-    """DataMan: Headless Data Layer API Generator."""
+    """Data MiddleMan (DataMan) CLI"""
     pass
 
 
@@ -18,35 +29,33 @@ def cli():
 def init():
     """Initialize a new DataMan project in the current directory."""
     cwd = Path.cwd()
-
-    # Create .env file
     env_path = cwd / ".env"
-    if not env_path.exists():
-        import secrets
+    tables_dir = cwd / "tables"
 
-        secret_key = secrets.token_urlsafe(50)
-        with open(env_path, "w") as f:
-            f.write("DEBUG=False\n")
-            f.write(f"DATAMAN_SECRET_KEY={secret_key}\n")
-            f.write("DATABASE_URL=sqlite:///db.sqlite3\n")
-            f.write("ALLOWED_HOSTS=\n")
-        click.echo(click.style("Created .env file.", fg="green"))
-    else:
-        click.echo(click.style(".env file already exists, skipping.", fg="yellow"))
+    if env_path.exists() or tables_dir.exists():
+        click.echo(
+            click.style("Project already initialized in this directory.", fg="yellow")
+        )
+        return
+
+    # Create .env
+    secret_key = secrets.token_urlsafe(50)
+    with open(env_path, "w") as f:
+        f.write(f"DATAMAN_SECRET_KEY='{secret_key}'\n")
+        f.write("DEBUG=True\n")
+        f.write("DATABASE_URL=sqlite:///db.sqlite3\n")
+        f.write("ALLOWED_HOSTS=127.0.0.1,localhost\n")
+    click.echo(click.style("Created .env file.", fg="green"))
 
     # Create tables directory
-    tables_dir = cwd / "tables"
-    if not tables_dir.exists():
-        tables_dir.mkdir()
-        click.echo(click.style("Created tables/ directory.", fg="green"))
+    tables_dir.mkdir()
+    (tables_dir / "__init__.py").touch()
+    click.echo(click.style("Created tables/ directory.", fg="green"))
 
-        # Create an __init__.py inside it to make it a package
-        init_file = tables_dir / "__init__.py"
-        init_file.touch()
-    else:
-        click.echo(
-            click.style("tables/ directory already exists, skipping.", fg="yellow")
-        )
+    # Generate initial migrations package
+    migrations_dir = tables_dir / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "__init__.py").touch()
 
     click.echo(
         click.style("DataMan project initialized successfully!", fg="green", bold=True)
@@ -55,93 +64,69 @@ def init():
 
 @cli.group()
 def create():
-    """Create resources."""
+    """Create resources like tables."""
     pass
 
 
 @create.command(name="table")
-@click.argument("table_name")
+@click.argument("name")
 @click.option(
     "--operations",
     "-o",
     default="crud",
-    help="Allowed operations (c=create, r=read, u=update, d=delete)",
+    help="Allowed operations: c (create), r (read), u (update), d (delete).",
 )
-def create_table(table_name: str, operations: str):
-    """Scaffold a new table structure."""
-    if not re.match(r"^[a-zA-Z0-9_]+$", table_name):
+def create_table(name, operations):
+    """Scaffold a new database table and API endpoint."""
+    _ensure_initialized()
+
+    # Sanitize inputs
+    if "/" in name or "\\" in name or "." in name:
+        click.echo(click.style("Invalid table name.", fg="red"))
+        raise click.Abort()
+
+    table_name = inflection.camelize(name)
+
+    if not table_name.isidentifier():
         click.echo(
             click.style(
-                "Error: Invalid table name. "
-                "Use only alphanumeric characters and underscores.",
+                f"Invalid table name: '{table_name}' is not a valid Python identifier.",
                 fg="red",
             )
         )
         raise click.Abort()
 
-    table_name = inflection.camelize(table_name)
+    table_dir = Path.cwd() / "tables" / table_name
 
-    cwd = Path.cwd()
-    tables_dir = cwd / "tables"
-
-    if not tables_dir.exists():
-        click.echo(
-            click.style(
-                "Error: tables/ directory not found. Did you run 'dataman init'?",
-                fg="red",
-            )
-        )
-        raise click.Abort()
-
-    # Create table directory
-    table_dir = tables_dir / table_name
     if table_dir.exists():
-        click.echo(
-            click.style(
-                f"Error: Table directory {table_name} already exists.", fg="red"
-            )
-        )
+        click.echo(click.style(f"Table '{table_name}' already exists.", fg="yellow"))
         raise click.Abort()
 
-    table_dir.mkdir()
+    table_dir.mkdir(parents=True)
     (table_dir / "__init__.py").touch()
 
-    # Parse operations
     ops_map = {"c": "C", "r": "R", "u": "U", "d": "D"}
     ops_list = [ops_map[char] for char in operations.lower() if char in ops_map]
 
     # Write config.py
     with open(table_dir / "config.py", "w") as f:
-        f.write(
-            f"# Auto-generated by DataMan\n\n"
-            f"# Allowed operations for this endpoint\n"
-            f"ALLOWED_OPERATIONS = {ops_list}\n\n"
-            f"# Set to True to require token authentication for this endpoint\n"
-            f"REQUIRE_AUTH = True\n\n"
-            f"# API Features & Capabilities\n"
-            f"PAGE_SIZE = None\n"
-            f"FILTER_FIELDS = []\n"
-            f"SEARCH_FIELDS = []\n"
-            f"ORDERING_FIELDS = []\n"
-            f"WEBHOOK_URL = None\n"
-            f"RATE_LIMIT = None  # e.g., '100/day', '10/minute'\n"
-        )
+        f.write(f"ALLOWED_OPERATIONS = {ops_list}\n")
+        f.write("REQUIRE_AUTH = True\n")
+        scopes = [f"{table_name.lower()}:read", f"{table_name.lower()}:write"]
+        f.write(f"TABLE_SCOPES = {scopes}\n")
+        f.write("THROTTLE_RATES = {'anon': '100/day', 'user': '1000/day'}\n")
+        f.write("WEBHOOK_URLS = []\n")
 
-    # Write model.py
-    db_table_name = "".join(
-        ["_" + c.lower() if c.isupper() else c for c in table_name]
-    ).lstrip("_")
-    with open(table_dir / "model.py", "w") as f:
-        f.write(
-            f"# Auto-generated by DataMan\n"
-            f"from django.db import models\n\n\n"
-            f"class {table_name}(models.Model):\n"
-            f"    # Define your fields here, for example:\n"
-            f"    # name = models.CharField(max_length=255)\n\n"
-            f"    class Meta:\n"
-            f'        app_label = "dataman"\n'
-            f'        db_table = "{db_table_name}"\n'
-        )
+    # Write models.py
+    with open(table_dir / "models.py", "w") as f:
+        f.write("from django.db import models\n\n")
+        f.write(f"class {table_name}(models.Model):\n")
+        f.write("    # Add your fields here\n")
+        f.write("    created_at = models.DateTimeField(auto_now_add=True)\n")
+        f.write("    updated_at = models.DateTimeField(auto_now=True)\n\n")
+        f.write("    class Meta:\n")
+        f.write("        app_label = 'dataman'\n")
+        f.write(f"        db_table = '{table_name.lower()}'\n")
 
     # Write validation.py
     with open(table_dir / "validation.py", "w") as f:
@@ -173,8 +158,7 @@ def create_table(table_name: str, operations: str):
 
     click.echo(
         click.style(
-            f"Successfully created table structure for {table_name}!",
-            fg="green",
+            f"Successfully created table structure for {table_name}!", fg="green"
         )
     )
 
@@ -182,18 +166,19 @@ def create_table(table_name: str, operations: str):
 @cli.command()
 def makemigration():
     """Create new migrations based on the models you have defined."""
+    _ensure_initialized()
     django_setup.setup()
     try:
         call_command("makemigrations", "dataman")
         click.echo(click.style("Migrations created successfully!", fg="green"))
     except SystemExit as e:
-        # Django's call_command might call sys.exit if there's an error
         raise click.Abort() from e
 
 
 @cli.command()
 def migrate():
     """Apply migrations to the database."""
+    _ensure_initialized()
     django_setup.setup()
     try:
         call_command("migrate")
@@ -211,6 +196,7 @@ def server():
 @server.command()
 def start():
     """Start the DataMan API server."""
+    _ensure_initialized()
     django_setup.setup()
     try:
         click.echo(
@@ -234,6 +220,7 @@ def users():
 @users.command(name="create-admin")
 def create_admin():
     """Create a superuser for the admin panel."""
+    _ensure_initialized()
     django_setup.setup()
     try:
         call_command("createsuperuser")
@@ -248,12 +235,14 @@ def create_admin():
     default="*",
     help=(
         "Comma separated list of scopes (e.g. 'customer:read,invoice:write'). "
-        "Default is '*'."
+        "Use '*' for all scopes."
     ),
 )
 def create_token(name, scopes):
-    """Generate an API Service Token with specific scopes."""
+    """Generate a programmatic API token."""
+    _ensure_initialized()
     django_setup.setup()
+
     import hashlib
     import json
     import secrets

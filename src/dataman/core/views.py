@@ -1,6 +1,7 @@
 import hashlib
 import secrets
 
+from django.contrib.auth.decorators import user_passes_test
 from django.db.models import Avg, Count
 from django.shortcuts import render
 from rest_framework import permissions, status, viewsets
@@ -12,13 +13,13 @@ from .models import APILog, APIToken
 
 class IsAdminOrLocal(permissions.BasePermission):
     """
-    Allow access to dashboard APIs if the user is a superuser,
-    or if we are running in local dev without auth restrictions.
-    For DataMan library, we default to allow for internal dashboard.
+    Allow access to dashboard APIs if the user is a superuser.
     """
 
     def has_permission(self, request, view):
-        return True  # For now, allow all on internal dashboard endpoints
+        return bool(
+            request.user and request.user.is_authenticated and request.user.is_superuser
+        )
 
 
 @api_view(["GET"])
@@ -49,7 +50,7 @@ def analytics_summary(request):
 @permission_classes([IsAdminOrLocal])
 def analytics_logs(request):
     """Returns the 50 most recent API logs."""
-    logs = APILog.objects.all()[:50]
+    logs = APILog.objects.all().order_by("-timestamp")[:50]
     data = [
         {
             "id": log.id,
@@ -71,7 +72,7 @@ class APITokenViewSet(viewsets.ViewSet):
     permission_classes = [IsAdminOrLocal]
 
     def list(self, request):
-        tokens = APIToken.objects.all()
+        tokens = APIToken.objects.all().order_by("-created_at")
         return Response(
             [
                 {
@@ -125,6 +126,7 @@ class APITokenViewSet(viewsets.ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
 
+@user_passes_test(lambda u: u.is_superuser)
 def dashboard_view(request):
     """Serves the dashboard HTML."""
     return render(request, "dashboard.html")

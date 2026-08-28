@@ -55,8 +55,8 @@ tables_dir = cwd / "tables"
 
 if tables_dir.exists():
     for d in tables_dir.iterdir():
-        if d.is_dir() and (d / "model.py").exists():
-            module_name = f"tables.{d.name}.model"
+        if d.is_dir() and (d / "models.py").exists():
+            module_name = f"tables.{d.name}.models"
             try:
                 importlib.import_module(module_name)
             except Exception as e:

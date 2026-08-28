@@ -34,16 +34,16 @@ def test_e2e_crud_with_field_types_and_pagination(tmp_path):
             )
 
         # 3. Add complex fields to models
-        cat_model = Path("tables/Category/model.py")
+        cat_model = Path("tables/Category/models.py")
         cat_model_text = cat_model.read_text().replace(
-            "# name = models.CharField(max_length=255)",
+            "# Add your fields here",
             "name = models.CharField(max_length=255)",
         )
         cat_model.write_text(cat_model_text)
 
-        prod_model = Path("tables/Product/model.py")
+        prod_model = Path("tables/Product/models.py")
         prod_model_text = prod_model.read_text().replace(
-            "# name = models.CharField(max_length=255)",
+            "# Add your fields here",
             "name = models.CharField(max_length=255)\n"
             "    price = models.IntegerField(default=0)\n"
             "    in_stock = models.BooleanField(default=True)\n"

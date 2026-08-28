@@ -27,12 +27,13 @@ def test_hooks_edge_cases(tmp_path):
             config.read_text().replace("REQUIRE_AUTH = True", "REQUIRE_AUTH = False")
         )
 
-        # Add title field
-        model_py = Path("tables/Document/model.py")
+        # Add fields to models.py
+        model_py = Path("tables/Document/models.py")
         model_py.write_text(
             model_py.read_text().replace(
-                "# name = models.CharField(max_length=255)",
-                "title = models.CharField(max_length=255)",
+                "# Add your fields here",
+                "title = models.CharField(max_length=255)\n"
+                "    is_published = models.BooleanField(default=False)",
             )
         )
 
