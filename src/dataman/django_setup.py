@@ -81,6 +81,7 @@ def setup():
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "django.contrib.messages.middleware.MessageMiddleware",
             "django.middleware.clickjacking.XFrameOptionsMiddleware",
+            "dataman.core.middleware.APILoggingMiddleware",
         ],
         TEMPLATES=[
             {

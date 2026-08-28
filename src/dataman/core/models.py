@@ -27,6 +27,25 @@ class APIToken(models.Model):
         return f"{self.name} ({self.prefix}...)"
 
 
+class APILog(models.Model):
+    """Telemetry data for API endpoint analysis."""
+
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    method = models.CharField(max_length=10)
+    path = models.CharField(max_length=255, db_index=True)
+    status_code = models.IntegerField()
+    duration_ms = models.IntegerField()
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        app_label = "dataman"
+        db_table = "dataman_apilog"
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"{self.method} {self.path} - {self.status_code} ({self.duration_ms}ms)"
+
+
 # Dynamic Model Loading
 cwd = Path.cwd()
 if str(cwd) not in sys.path:

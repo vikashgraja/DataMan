@@ -19,6 +19,13 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import ScopedRateThrottle
 from urllib3.util.retry import Retry
 
+from .views import (
+    APITokenViewSet,
+    analytics_logs,
+    analytics_summary,
+    dashboard_view,
+)
+
 router = routers.DefaultRouter()
 webhook_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
@@ -52,7 +59,7 @@ try:
     for model in dataman_app.get_models():
         model_name = model.__name__
 
-        if model_name == "APIToken":
+        if model_name in ("APIToken", "APILog"):
             continue
 
         # Read operations from config
@@ -278,6 +285,9 @@ try:
 except LookupError:
     pass
 
+internal_router = routers.DefaultRouter()
+internal_router.register(r"tokens", APITokenViewSet, basename="tokens")
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include(router.urls)),
@@ -287,5 +297,11 @@ urlpatterns = [
         SpectacularSwaggerView.as_view(url_name="schema"),
         name="swagger-ui",
     ),
+    path(
+        "api/_internal/analytics/summary/", analytics_summary, name="analytics-summary"
+    ),
+    path("api/_internal/analytics/logs/", analytics_logs, name="analytics-logs"),
+    path("api/_internal/", include(internal_router.urls)),
+    path("dashboard/", dashboard_view, name="dashboard"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 ]
