@@ -12,12 +12,15 @@ class APILoggingMiddleware:
     def __call__(self, request):
         path = request.path
         # Only log requests to actual data endpoints,
-        # exclude internal/dashboard/docs routes.
+        # exclude internal/dashboard/docs/health routes.
         if (
             not path.startswith("/api/")
             or path.startswith("/api/schema")
             or path.startswith("/api/docs")
+            or path.startswith("/api/redoc")
             or path.startswith("/api/_internal/")
+            or path.startswith("/api/health")
+            or path.startswith("/health")
         ):
             return self.get_response(request)
 

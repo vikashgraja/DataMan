@@ -11,6 +11,7 @@
 - **Validation Injection**: Run custom data validators before database commits via `validation.py`.
 - **Fine-Grained Authentication**: Lock down endpoints using granular, table-and-operation specific scopes (e.g., `customer:read`, `order:write`).
 - **Dynamic Routing & Pagination**: Built-in DRF integration with default pagination and dynamic URL mappings.
+- **Production Health Probes**: Built-in `/health/live/` and `/health/ready/` endpoints for Kubernetes/Docker container monitoring, database vitality, and migration checks.
 
 ---
 
@@ -126,6 +127,12 @@ def after_create(instance):
     # instance is the saved Django model object
     print(f"Successfully created customer: {instance.name}")
 ```
+
+### 5. Health Checks & Readiness Probes
+DataMan comes with built-in health check endpoints designed for cloud platforms, load balancers, and orchestrators (Kubernetes, AWS ECS, Docker):
+* `GET /health/live/` (or `/api/health/live/`): Liveness probe returning `200 OK` indicating the process is alive.
+* `GET /health/ready/` (or `/api/health/ready/`): Readiness probe validating active database connection integrity and unapplied migrations (returns `200 OK` or `503 Service Unavailable`).
+* `GET /health/` (or `/api/health/`): Unified health status with database latency metrics.
 
 ---
 

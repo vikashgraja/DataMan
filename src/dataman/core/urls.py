@@ -24,6 +24,9 @@ from .views import (
     analytics_logs,
     analytics_summary,
     dashboard_view,
+    health_check,
+    health_live,
+    health_ready,
 )
 
 router = routers.DefaultRouter()
@@ -291,6 +294,12 @@ internal_router.register(r"tokens", APITokenViewSet, basename="tokens")
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include(router.urls)),
+    path("health/", health_check, name="health"),
+    path("health/live/", health_live, name="health-live"),
+    path("health/ready/", health_ready, name="health-ready"),
+    path("api/health/", health_check, name="api-health"),
+    path("api/health/live/", health_live, name="api-health-live"),
+    path("api/health/ready/", health_ready, name="api-health-ready"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/docs/",

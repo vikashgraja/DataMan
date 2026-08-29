@@ -1,7 +1,10 @@
 import hashlib
 import secrets
+import time
 
 from django.contrib.auth.decorators import user_passes_test
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from django.db.models import Avg, Count
 from django.shortcuts import render
 from rest_framework import permissions, status, viewsets
@@ -9,6 +12,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from .models import APILog, APIToken
+
 
 
 class IsAdminOrLocal(permissions.BasePermission):
@@ -130,3 +134,79 @@ class APITokenViewSet(viewsets.ViewSet):
 def dashboard_view(request):
     """Serves the dashboard HTML."""
     return render(request, "dashboard.html")
+
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def health_live(request):
+    """Liveness probe: verifies that the web process is active and serving traffic."""
+    return Response(
+        {"status": "alive", "timestamp": time.time()},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def health_ready(request):
+    """Readiness probe: verifies external dependencies (DB connection, migrations)."""
+    checks = {}
+    is_healthy = True
+
+    # 1. Database connectivity check
+    db_start = time.time()
+    try:
+        connection.ensure_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        db_latency = round((time.time() - db_start) * 1000, 2)
+        checks["database"] = {
+            "status": "connected",
+            "vendor": connection.vendor,
+            "latency_ms": db_latency,
+        }
+    except Exception as e:
+        is_healthy = False
+        checks["database"] = {
+            "status": "disconnected",
+            "error": str(e),
+        }
+
+    # 2. Migrations check
+    try:
+        executor = MigrationExecutor(connection)
+        targets = executor.loader.graph.leaf_nodes()
+        unapplied_count = len(executor.migration_plan(targets))
+        checks["migrations"] = {
+            "status": "applied" if unapplied_count == 0 else "pending",
+            "unapplied_count": unapplied_count,
+        }
+        if unapplied_count > 0:
+            is_healthy = False
+    except Exception as e:
+        is_healthy = False
+        checks["migrations"] = {
+            "status": "error",
+            "error": str(e),
+        }
+
+    resp_status = (
+        status.HTTP_200_OK if is_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
+    )
+    return Response(
+        {
+            "status": "ready" if is_healthy else "unhealthy",
+            "timestamp": time.time(),
+            "checks": checks,
+        },
+        status=resp_status,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def health_check(request):
+    """General health check endpoint combining liveness and readiness."""
+    return health_ready(request._request)
+
