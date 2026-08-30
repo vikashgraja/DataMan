@@ -116,6 +116,7 @@ def create_table(name, operations):
         f.write(f"TABLE_SCOPES = {scopes}\n")
         f.write("THROTTLE_RATES = {'anon': '100/day', 'user': '1000/day'}\n")
         f.write("WEBHOOK_URLS = []\n")
+        f.write("DEPTH = 0  # Set to 1 or higher to automatically serialize nested relationships\n")
 
     # Write models.py
     with open(table_dir / "models.py", "w") as f:

@@ -74,6 +74,7 @@ try:
         ordering_fields = []
         webhook_url = None
         rate_limit = None
+        depth = None
         try:
             config_module = importlib.import_module(f"tables.{model_name}.config")
             if hasattr(config_module, "ALLOWED_OPERATIONS"):
@@ -92,6 +93,8 @@ try:
                 webhook_url = config_module.WEBHOOK_URL
             if hasattr(config_module, "RATE_LIMIT"):
                 rate_limit = config_module.RATE_LIMIT
+            if hasattr(config_module, "DEPTH"):
+                depth = config_module.DEPTH
         except ModuleNotFoundError:
             pass  # nosec B110
 
@@ -155,6 +158,20 @@ try:
             (serializers.ModelSerializer,),
             {"Meta": Meta, "validate": custom_validate},
         )
+
+        read_serializer_class = serializer_class
+        if depth is not None and depth > 0:
+
+            class ReadMeta:
+                model = model
+                fields = "__all__"
+                depth = depth
+
+            read_serializer_class = type(
+                f"{model_name}ReadSerializer",
+                (serializers.ModelSerializer,),
+                {"Meta": ReadMeta, "validate": custom_validate},
+            )
 
         # Permissions
         permission_classes = []
@@ -228,6 +245,21 @@ try:
             "perform_update": custom_perform_update,
             "perform_destroy": custom_perform_destroy,
         }
+
+        if depth is not None and depth > 0:
+
+            def custom_get_serializer_class(
+                self, r_class=read_serializer_class, w_class=serializer_class
+            ):
+                if getattr(self, "action", None) in ("list", "retrieve") or (
+                    hasattr(self, "request")
+                    and self.request
+                    and self.request.method in ("GET", "HEAD", "OPTIONS")
+                ):
+                    return r_class
+                return w_class
+
+            viewset_attrs["get_serializer_class"] = custom_get_serializer_class
 
         # Bulk creation support
         def custom_get_serializer(self, *args, **kwargs):

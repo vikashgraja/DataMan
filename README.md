@@ -84,6 +84,7 @@ Control exactly what HTTP methods are exposed and whether the table requires aut
 # tables/Customer/config.py
 ALLOWED_OPERATIONS = ["C", "R"]  # Only allow Create (POST) and Read (GET)
 REQUIRE_AUTH = True  # Lock down this endpoint
+DEPTH = 1  # Automatically serialize nested Foreign Key relationships on read (GET)
 ```
 
 ### 2. Authentication & Scopes
