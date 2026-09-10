@@ -347,5 +347,206 @@ def create_token(name, scopes, expires_in):
     )
 
 
+@cli.group()
+def logs():
+    """Export and inspect system logs."""
+    pass
+
+
+@logs.command(name="export-audit")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["csv", "json"], case_sensitive=False),
+    default="csv",
+    help="Export format (csv or json).",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=None,
+    help="Output file path. Defaults to ./audit_logs_<timestamp>.<ext>",
+)
+@click.option("--event-type", default=None, help="Filter by specific event type.")
+@click.option(
+    "--severity",
+    default=None,
+    help="Filter by severity level (INFO, WARNING, ERROR, CRITICAL).",
+)
+@click.option("--actor", default=None, help="Filter by actor identifier.")
+@click.option("--search", default=None, help="Search query across event, actor, or IP.")
+@click.option(
+    "--limit", default=10000, type=int, help="Maximum number of records to export."
+)
+def export_audit(format, output, event_type, severity, actor, search, limit):
+    """Export security and compliance audit logs."""
+    _ensure_initialized()
+    django_setup.setup()
+
+    import csv
+    import json
+    from django.db.models import Q
+    from django.utils import timezone
+    from dataman.core.models import AuditLog
+
+    qs = AuditLog.objects.all().order_by("-timestamp")
+    if event_type:
+        qs = qs.filter(event_type=event_type)
+    if severity:
+        qs = qs.filter(severity__iexact=severity)
+    if actor:
+        qs = qs.filter(actor__icontains=actor)
+    if search:
+        qs = qs.filter(
+            Q(event_type__icontains=search)
+            | Q(actor__icontains=search)
+            | Q(ip_address__icontains=search)
+        )
+
+    records = list(qs[:limit])
+    timestamp_str = timezone.now().strftime("%Y%m%d_%H%M%S")
+    ext = format.lower()
+    out_path = Path(output) if output else Path(f"audit_logs_{timestamp_str}.{ext}")
+
+    if ext == "json":
+        data = [
+            {
+                "id": r.id,
+                "timestamp": r.timestamp.isoformat(),
+                "event_type": r.event_type,
+                "actor": r.actor,
+                "ip_address": r.ip_address,
+                "user_agent": r.user_agent,
+                "status_code": r.status_code,
+                "severity": r.severity,
+                "details": r.details,
+            }
+            for r in records
+        ]
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, default=str)
+    else:
+        with open(out_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "id",
+                    "timestamp",
+                    "severity",
+                    "event_type",
+                    "actor",
+                    "ip_address",
+                    "status_code",
+                    "user_agent",
+                    "details",
+                ]
+            )
+            for r in records:
+                writer.writerow(
+                    [
+                        r.id,
+                        r.timestamp.isoformat(),
+                        r.severity,
+                        r.event_type,
+                        r.actor,
+                        r.ip_address or "",
+                        r.status_code if r.status_code is not None else "",
+                        r.user_agent or "",
+                        json.dumps(r.details, default=str),
+                    ]
+                )
+
+    click.echo(
+        click.style(
+            f"Successfully exported {len(records)} audit log records to {out_path.resolve()}",
+            fg="green",
+            bold=True,
+        )
+    )
+
+
+@logs.command(name="export-telemetry")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["csv", "json"], case_sensitive=False),
+    default="csv",
+    help="Export format (csv or json).",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=None,
+    help="Output file path. Defaults to ./api_telemetry_<timestamp>.<ext>",
+)
+@click.option(
+    "--limit", default=10000, type=int, help="Maximum number of records to export."
+)
+def export_telemetry(format, output, limit):
+    """Export API request telemetry logs."""
+    _ensure_initialized()
+    django_setup.setup()
+
+    import csv
+    import json
+    from django.utils import timezone
+    from dataman.core.models import APILog
+
+    records = list(APILog.objects.all().order_by("-timestamp")[:limit])
+    timestamp_str = timezone.now().strftime("%Y%m%d_%H%M%S")
+    ext = format.lower()
+    out_path = Path(output) if output else Path(f"api_telemetry_{timestamp_str}.{ext}")
+
+    if ext == "json":
+        data = [
+            {
+                "id": r.id,
+                "timestamp": r.timestamp.isoformat(),
+                "method": r.method,
+                "path": r.path,
+                "status_code": r.status_code,
+                "duration_ms": r.duration_ms,
+                "ip_address": r.ip_address,
+            }
+            for r in records
+        ]
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    else:
+        with open(out_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "id",
+                    "timestamp",
+                    "method",
+                    "path",
+                    "status_code",
+                    "duration_ms",
+                    "ip_address",
+                ]
+            )
+            for r in records:
+                writer.writerow(
+                    [
+                        r.id,
+                        r.timestamp.isoformat(),
+                        r.method,
+                        r.path,
+                        r.status_code,
+                        r.duration_ms,
+                        r.ip_address or "",
+                    ]
+                )
+
+    click.echo(
+        click.style(
+            f"Successfully exported {len(records)} telemetry log records to {out_path.resolve()}",
+            fg="green",
+            bold=True,
+        )
+    )
+
+
 if __name__ == "__main__":
     cli()

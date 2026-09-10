@@ -1,4 +1,7 @@
+import csv
 import hashlib
+import io
+import json
 import secrets
 import time
 from datetime import datetime, timedelta
@@ -7,16 +10,44 @@ from django.contrib.auth.decorators import user_passes_test
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.models import Avg, Count, Q
+from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import (
+    action,
+    api_view,
+    authentication_classes,
+    permission_classes,
+    renderer_classes,
+)
+from rest_framework.renderers import BaseRenderer, BrowsableAPIRenderer, JSONRenderer
 from rest_framework.response import Response
 
 from .audit import log_audit_event
 from .auth import CsrfExemptSessionAuthentication, ServiceTokenAuthentication
 from .models import APILog, APIToken, AuditLog
+
+
+class CSVRenderer(BaseRenderer):
+    """Renderer to allow DRF format_suffix negotiation for CSV downloads."""
+
+    media_type = "text/csv"
+    format = "csv"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return data
+
+
+class PlainJSONRenderer(BaseRenderer):
+    """Renderer to allow DRF format_suffix negotiation for JSON file exports."""
+
+    media_type = "application/json"
+    format = "json"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return data
 
 
 class IsAdminOrLocal(permissions.BasePermission):
@@ -74,6 +105,73 @@ def analytics_logs(request):
         for log in logs
     ]
     return Response(data)
+
+
+@api_view(["GET"])
+@authentication_classes([CsrfExemptSessionAuthentication, ServiceTokenAuthentication])
+@permission_classes([IsAdminOrLocal])
+@renderer_classes([CSVRenderer, PlainJSONRenderer, JSONRenderer])
+def analytics_export(request):
+    """Exports API telemetry logs as CSV or JSON."""
+    fmt = request.query_params.get("format", "csv").lower()
+    limit = min(int(request.query_params.get("limit", 10000)), 50000)
+    logs = APILog.objects.all().order_by("-timestamp")[:limit]
+
+    timestamp_str = timezone.now().strftime("%Y%m%d_%H%M%S")
+
+    if fmt == "json":
+        data = [
+            {
+                "id": log.id,
+                "timestamp": log.timestamp.isoformat(),
+                "method": log.method,
+                "path": log.path,
+                "status_code": log.status_code,
+                "duration_ms": log.duration_ms,
+                "ip_address": log.ip_address,
+            }
+            for log in logs
+        ]
+        response = HttpResponse(
+            json.dumps(data, indent=2), content_type="application/json"
+        )
+        response["Content-Disposition"] = (
+            f'attachment; filename="api_telemetry_{timestamp_str}.json"'
+        )
+        return response
+
+    # Default CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "id",
+            "timestamp",
+            "method",
+            "path",
+            "status_code",
+            "duration_ms",
+            "ip_address",
+        ]
+    )
+    for log in logs:
+        writer.writerow(
+            [
+                log.id,
+                log.timestamp.isoformat(),
+                log.method,
+                log.path,
+                log.status_code,
+                log.duration_ms,
+                log.ip_address or "",
+            ]
+        )
+
+    response = HttpResponse(output.getvalue(), content_type="text/csv")
+    response["Content-Disposition"] = (
+        f'attachment; filename="api_telemetry_{timestamp_str}.csv"'
+    )
+    return response
 
 
 def parse_token_expiration(val):
@@ -208,11 +306,12 @@ class APITokenViewSet(viewsets.ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
 
-class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+class AuditLogViewSet(viewsets.ViewSet):
     """Internal ViewSet to query and filter Audit Logs."""
 
     authentication_classes = [CsrfExemptSessionAuthentication, ServiceTokenAuthentication]
     permission_classes = [IsAdminOrLocal]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, CSVRenderer, PlainJSONRenderer]
 
     def list(self, request):
         qs = AuditLog.objects.all().order_by("-timestamp")
@@ -256,6 +355,98 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                 for log in logs
             ]
         )
+
+    @action(detail=False, methods=["get"])
+    def export(self, request):
+        """Exports filtered Audit Logs as CSV or JSON."""
+        qs = AuditLog.objects.all().order_by("-timestamp")
+
+        event_type = request.query_params.get("event_type")
+        if event_type:
+            qs = qs.filter(event_type=event_type)
+
+        severity = request.query_params.get("severity")
+        if severity:
+            qs = qs.filter(severity__iexact=severity)
+
+        actor = request.query_params.get("actor")
+        if actor:
+            qs = qs.filter(actor__icontains=actor)
+
+        search = request.query_params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(event_type__icontains=search)
+                | Q(actor__icontains=search)
+                | Q(ip_address__icontains=search)
+            )
+
+        limit = min(int(request.query_params.get("limit", 10000)), 50000)
+        logs = qs[:limit]
+
+        fmt = request.query_params.get("format", "csv").lower()
+        timestamp_str = timezone.now().strftime("%Y%m%d_%H%M%S")
+
+        if fmt == "json":
+            data = [
+                {
+                    "id": log.id,
+                    "timestamp": log.timestamp.isoformat(),
+                    "event_type": log.event_type,
+                    "actor": log.actor,
+                    "ip_address": log.ip_address,
+                    "user_agent": log.user_agent,
+                    "status_code": log.status_code,
+                    "severity": log.severity,
+                    "details": log.details,
+                }
+                for log in logs
+            ]
+            response = HttpResponse(
+                json.dumps(data, indent=2, default=str),
+                content_type="application/json",
+            )
+            response["Content-Disposition"] = (
+                f'attachment; filename="audit_logs_{timestamp_str}.json"'
+            )
+            return response
+
+        # Default CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "id",
+                "timestamp",
+                "severity",
+                "event_type",
+                "actor",
+                "ip_address",
+                "status_code",
+                "user_agent",
+                "details",
+            ]
+        )
+        for log in logs:
+            writer.writerow(
+                [
+                    log.id,
+                    log.timestamp.isoformat(),
+                    log.severity,
+                    log.event_type,
+                    log.actor,
+                    log.ip_address or "",
+                    log.status_code if log.status_code is not None else "",
+                    log.user_agent or "",
+                    json.dumps(log.details, default=str),
+                ]
+            )
+
+        response = HttpResponse(output.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = (
+            f'attachment; filename="audit_logs_{timestamp_str}.csv"'
+        )
+        return response
 
 
 @user_passes_test(lambda u: u.is_superuser, login_url="/admin/login/")

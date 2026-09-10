@@ -104,6 +104,15 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
         }
 
         h1 {
@@ -239,6 +248,7 @@
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
+            text-decoration: none;
         }
 
         .btn:hover {
@@ -262,6 +272,7 @@
         .btn-outline {
             background: transparent;
             border: 1px solid var(--border-color);
+            color: var(--text-primary);
         }
         .btn-outline:hover { background: rgba(255,255,255,0.05); box-shadow: none; }
 
@@ -402,7 +413,11 @@
         <div id="tab-analytics">
             <div class="header-row">
                 <h1>API Telemetry & Performance</h1>
-                <button class="btn btn-outline" onclick="loadAnalytics()">Refresh Data</button>
+                <div class="header-actions">
+                    <button class="btn btn-outline" onclick="exportTelemetry('csv')">Export CSV</button>
+                    <button class="btn btn-outline" onclick="exportTelemetry('json')">Export JSON</button>
+                    <button class="btn btn-outline" onclick="loadAnalytics()">Refresh Data</button>
+                </div>
             </div>
 
             <!-- Metrics -->
@@ -498,7 +513,11 @@
         <div id="tab-audit" class="hidden">
             <div class="header-row">
                 <h1>Security & Compliance Audit Trail</h1>
-                <button class="btn btn-outline" onclick="loadAuditLogs()">Refresh Trail</button>
+                <div class="header-actions">
+                    <button class="btn btn-outline" onclick="exportAuditLogs('csv')">Export CSV</button>
+                    <button class="btn btn-outline" onclick="exportAuditLogs('json')">Export JSON</button>
+                    <button class="btn btn-outline" onclick="loadAuditLogs()">Refresh Trail</button>
+                </div>
             </div>
 
             <div class="card">
@@ -726,6 +745,10 @@
             }
         }
 
+        function exportTelemetry(format) {
+            window.location.href = `/api/_internal/analytics/export/?format=${format}`;
+        }
+
         // --- RBAC Tab Logic ---
         async function loadTokens() {
             const tokens = await fetchAPI('/api/_internal/tokens/');
@@ -847,6 +870,19 @@
                     </tr>`;
                 });
             }
+        }
+
+        function exportAuditLogs(format) {
+            const eventType = document.getElementById('audit-filter-event').value;
+            const severity = document.getElementById('audit-filter-severity').value;
+            const search = document.getElementById('audit-filter-search').value.trim();
+
+            let url = `/api/_internal/audit/export/?format=${format}`;
+            if(eventType) url += `&event_type=${encodeURIComponent(eventType)}`;
+            if(severity) url += `&severity=${encodeURIComponent(severity)}`;
+            if(search) url += `&search=${encodeURIComponent(search)}`;
+
+            window.location.href = url;
         }
 
         function viewAuditDetail(idx) {

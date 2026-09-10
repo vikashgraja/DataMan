@@ -23,6 +23,7 @@ from .audit import log_audit_event
 from .views import (
     APITokenViewSet,
     AuditLogViewSet,
+    analytics_export,
     analytics_logs,
     analytics_summary,
     dashboard_view,
@@ -383,6 +384,9 @@ urlpatterns = [
         "api/_internal/analytics/summary/", analytics_summary, name="analytics-summary"
     ),
     path("api/_internal/analytics/logs/", analytics_logs, name="analytics-logs"),
+    path(
+        "api/_internal/analytics/export/", analytics_export, name="analytics-export"
+    ),
     path("api/_internal/", include(internal_router.urls)),
     path("dashboard/", dashboard_view, name="dashboard"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
