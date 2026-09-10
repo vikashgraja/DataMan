@@ -37,6 +37,7 @@ dependencies = [
     "drf-spectacular>=0.28.0",
     "dj-database-url>=2.3.0",
     "inflection>=0.5.1",
+    "uvicorn>=0.34.0",
 ]
 
 [project.scripts]

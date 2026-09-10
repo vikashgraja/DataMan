@@ -198,21 +198,50 @@ def server():
 
 
 @server.command()
-def start():
+@click.option("--host", default="127.0.0.1", help="Host interface to bind to.")
+@click.option("--port", default=8000, type=int, help="Port to bind to.")
+@click.option(
+    "--asgi",
+    is_flag=True,
+    default=False,
+    help="Run with high-concurrency ASGI server (uvicorn).",
+)
+@click.option(
+    "--workers",
+    default=1,
+    type=int,
+    help="Number of worker processes (ASGI mode only).",
+)
+def start(host, port, asgi, workers):
     """Start the DataMan API server."""
     _ensure_initialized()
     django_setup.setup()
-    try:
+
+    if asgi:
+        import uvicorn
+
+        from dataman.django_setup import get_asgi_application
+
         click.echo(
             click.style(
-                "Starting DataMan server at http://127.0.0.1:8000/",
+                f"Starting DataMan ASGI server at http://{host}:{port}/",
                 fg="green",
                 bold=True,
             )
         )
-        call_command("runserver", "127.0.0.1:8000", use_reloader=False)
-    except SystemExit as e:
-        raise click.Abort() from e
+        uvicorn.run(get_asgi_application(), host=host, port=port, workers=workers)
+    else:
+        try:
+            click.echo(
+                click.style(
+                    f"Starting DataMan server at http://{host}:{port}/",
+                    fg="green",
+                    bold=True,
+                )
+            )
+            call_command("runserver", f"{host}:{port}", use_reloader=False)
+        except SystemExit as e:
+            raise click.Abort() from e
 
 
 @cli.group()

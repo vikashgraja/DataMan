@@ -12,6 +12,7 @@
 - **Fine-Grained Authentication**: Lock down endpoints using granular, table-and-operation specific scopes (e.g., `customer:read`, `order:write`).
 - **Dynamic Routing & Pagination**: Built-in DRF integration with default pagination and dynamic URL mappings.
 - **Production Health Probes**: Built-in `/health/live/` and `/health/ready/` endpoints for Kubernetes/Docker container monitoring, database vitality, and migration checks.
+- **ASGI High-Concurrency Engine**: Built-in `uvicorn` server execution mode (`dataman server start --asgi`) for high throughput asynchronous performance.
 
 ---
 
@@ -68,7 +69,12 @@ Apply the database migrations and start the server!
 ```bash
 dataman makemigration
 dataman migrate
+
+# Start development WSGI server
 dataman server start
+
+# OR start high-concurrency production ASGI server with Uvicorn
+dataman server start --asgi --host 0.0.0.0 --port 8000 --workers 4
 ```
 *Your API is now live at `http://127.0.0.1:8000/api/customer/`!*
 

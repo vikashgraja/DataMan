@@ -102,3 +102,20 @@ def setup():
     )
 
     django.setup()
+
+
+def get_asgi_application():
+    """Initializes DataMan headless environment and returns the ASGI application callable."""
+    setup()
+    from django.core.asgi import get_asgi_application as django_get_asgi
+
+    return django_get_asgi()
+
+
+def get_wsgi_application():
+    """Initializes DataMan headless environment and returns the WSGI application callable."""
+    setup()
+    from django.core.wsgi import get_wsgi_application as django_get_wsgi
+
+    return django_get_wsgi()
+
