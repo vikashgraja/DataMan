@@ -18,6 +18,8 @@ class APIToken(models.Model):
     name = models.CharField(max_length=255)
     scopes = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
 
     class Meta:
         app_label = "dataman"
@@ -44,6 +46,27 @@ class APILog(models.Model):
 
     def __str__(self):
         return f"{self.method} {self.path} - {self.status_code} ({self.duration_ms}ms)"
+
+
+class AuditLog(models.Model):
+    """Enterprise Audit Trail for Security and Compliance."""
+
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    event_type = models.CharField(max_length=60, db_index=True)
+    actor = models.CharField(max_length=255, db_index=True, blank=True, default="")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, default="")
+    status_code = models.IntegerField(null=True, blank=True)
+    severity = models.CharField(max_length=20, default="INFO", db_index=True)
+    details = models.JSONField(default=dict)
+
+    class Meta:
+        app_label = "dataman"
+        db_table = "dataman_auditlog"
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"[{self.timestamp}] [{self.severity}] {self.event_type} - {self.actor or 'System'}"
 
 
 # Dynamic Model Loading

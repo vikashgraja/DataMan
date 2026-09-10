@@ -19,8 +19,10 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import ScopedRateThrottle
 from urllib3.util.retry import Retry
 
+from .audit import log_audit_event
 from .views import (
     APITokenViewSet,
+    AuditLogViewSet,
     analytics_logs,
     analytics_summary,
     dashboard_view,
@@ -67,7 +69,7 @@ try:
 
         model_name = model.__name__
 
-        if model_name in ("APIToken", "APILog"):
+        if model_name in ("APIToken", "APILog", "AuditLog"):
             continue
 
         # Read operations from config
@@ -200,6 +202,18 @@ try:
                 if s_mod and hasattr(s_mod, "after_create"):
                     s_mod.after_create(instance)
 
+                log_audit_event(
+                    event_type="RECORD_CREATED",
+                    request=getattr(self, "request", None),
+                    details={
+                        "table": t_name,
+                        "id": getattr(instance, "id", None),
+                        "data": serializer.data,
+                    },
+                    severity="INFO",
+                    status_code=201,
+                )
+
                 if w_url:
                     data = (
                         serializer.data
@@ -218,11 +232,24 @@ try:
                 if s_mod and hasattr(s_mod, "after_update"):
                     s_mod.after_update(instance)
 
+                log_audit_event(
+                    event_type="RECORD_UPDATED",
+                    request=getattr(self, "request", None),
+                    details={
+                        "table": t_name,
+                        "id": getattr(instance, "id", None),
+                        "data": serializer.data,
+                    },
+                    severity="INFO",
+                    status_code=200,
+                )
+
                 if w_url:
                     dispatch_webhook(w_url, "update", t_name, serializer.data)
 
             def _destroy(self, instance):
-                data_to_send = {"id": getattr(instance, "id", None)} if w_url else None
+                instance_id = getattr(instance, "id", None)
+                data_to_send = {"id": instance_id} if w_url else None
 
                 if s_mod and hasattr(s_mod, "before_destroy"):
                     s_mod.before_destroy(instance)
@@ -231,6 +258,14 @@ try:
 
                 if s_mod and hasattr(s_mod, "after_destroy"):
                     s_mod.after_destroy(instance)
+
+                log_audit_event(
+                    event_type="RECORD_DELETED",
+                    request=getattr(self, "request", None),
+                    details={"table": t_name, "id": instance_id},
+                    severity="WARNING",
+                    status_code=204,
+                )
 
                 if w_url:
                     dispatch_webhook(w_url, "destroy", t_name, data_to_send)
@@ -327,6 +362,7 @@ except LookupError:
 
 internal_router = routers.DefaultRouter()
 internal_router.register(r"tokens", APITokenViewSet, basename="tokens")
+internal_router.register(r"audit", AuditLogViewSet, basename="audit")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

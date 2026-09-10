@@ -1,19 +1,22 @@
 import hashlib
 import secrets
 import time
+from datetime import datetime, timedelta
 
 from django.contrib.auth.decorators import user_passes_test
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Q
 from django.shortcuts import render
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 
+from .audit import log_audit_event
 from .auth import CsrfExemptSessionAuthentication, ServiceTokenAuthentication
-from .models import APILog, APIToken
-
+from .models import APILog, APIToken, AuditLog
 
 
 class IsAdminOrLocal(permissions.BasePermission):
@@ -73,6 +76,34 @@ def analytics_logs(request):
     return Response(data)
 
 
+def parse_token_expiration(val):
+    """Helper to parse expiration strings/integers/dates."""
+    if not val or val == "never":
+        return None
+    now = timezone.now()
+    if isinstance(val, int):
+        return now + timedelta(days=val)
+    if isinstance(val, str):
+        val_clean = val.strip().lower()
+        if val_clean == "never":
+            return None
+        if val_clean.endswith("d"):
+            return now + timedelta(days=int(val_clean[:-1]))
+        elif val_clean.endswith("h"):
+            return now + timedelta(hours=int(val_clean[:-1]))
+        elif val_clean.endswith("y"):
+            return now + timedelta(days=int(val_clean[:-1]) * 365)
+        elif val_clean.isdigit():
+            return now + timedelta(days=int(val_clean))
+        # Try ISO parsing
+        parsed = parse_datetime(val)
+        if parsed:
+            if timezone.is_naive(parsed):
+                parsed = timezone.make_aware(parsed)
+            return parsed
+    return None
+
+
 class APITokenViewSet(viewsets.ViewSet):
     """Internal ViewSet to manage APITokens from the dashboard."""
 
@@ -81,6 +112,7 @@ class APITokenViewSet(viewsets.ViewSet):
 
     def list(self, request):
         tokens = APIToken.objects.all().order_by("-created_at")
+        now = timezone.now()
         return Response(
             [
                 {
@@ -89,6 +121,9 @@ class APITokenViewSet(viewsets.ViewSet):
                     "prefix": t.prefix,
                     "scopes": t.scopes,
                     "created_at": t.created_at,
+                    "expires_at": t.expires_at,
+                    "is_active": getattr(t, "is_active", True),
+                    "is_expired": bool(t.expires_at and now > t.expires_at),
                 }
                 for t in tokens
             ]
@@ -97,6 +132,7 @@ class APITokenViewSet(viewsets.ViewSet):
     def create(self, request):
         name = request.data.get("name")
         scopes = request.data.get("scopes", [])
+        expires_in = request.data.get("expires_in") or request.data.get("expires_in_days") or request.data.get("expires_at")
 
         if not name:
             return Response(
@@ -105,12 +141,31 @@ class APITokenViewSet(viewsets.ViewSet):
 
         raw_secret = secrets.token_hex(16)
         prefix = raw_secret[:8]
+        expires_at = parse_token_expiration(expires_in)
 
         token = APIToken.objects.create(
             name=name,
             scopes=scopes,
             prefix=prefix,
             hashed_secret=hashlib.sha256(raw_secret.encode()).hexdigest(),
+            expires_at=expires_at,
+            is_active=True,
+        )
+
+        actor_name = str(request.user) if (request.user and request.user.is_authenticated) else "Admin"
+        log_audit_event(
+            event_type="TOKEN_GENERATED",
+            actor=actor_name,
+            request=request,
+            details={
+                "token_id": token.id,
+                "name": token.name,
+                "prefix": token.prefix,
+                "scopes": token.scopes,
+                "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+            },
+            severity="INFO",
+            status_code=201,
         )
 
         # We only return the raw token once!
@@ -121,6 +176,7 @@ class APITokenViewSet(viewsets.ViewSet):
                 "prefix": token.prefix,
                 "scopes": token.scopes,
                 "token": f"{prefix}_{raw_secret}",
+                "expires_at": token.expires_at,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -128,16 +184,85 @@ class APITokenViewSet(viewsets.ViewSet):
     def destroy(self, request, pk=None):
         try:
             token = APIToken.objects.get(pk=pk)
+            token_id = token.id
+            token_name = token.name
+            token_prefix = token.prefix
             token.delete()
+
+            actor_name = str(request.user) if (request.user and request.user.is_authenticated) else "Admin"
+            log_audit_event(
+                event_type="TOKEN_REVOKED",
+                actor=actor_name,
+                request=request,
+                details={
+                    "token_id": token_id,
+                    "name": token_name,
+                    "prefix": token_prefix,
+                },
+                severity="WARNING",
+                status_code=204,
+            )
+
             return Response(status=status.HTTP_204_NO_CONTENT)
         except APIToken.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """Internal ViewSet to query and filter Audit Logs."""
+
+    authentication_classes = [CsrfExemptSessionAuthentication, ServiceTokenAuthentication]
+    permission_classes = [IsAdminOrLocal]
+
+    def list(self, request):
+        qs = AuditLog.objects.all().order_by("-timestamp")
+
+        event_type = request.query_params.get("event_type")
+        if event_type:
+            qs = qs.filter(event_type=event_type)
+
+        severity = request.query_params.get("severity")
+        if severity:
+            qs = qs.filter(severity__iexact=severity)
+
+        actor = request.query_params.get("actor")
+        if actor:
+            qs = qs.filter(actor__icontains=actor)
+
+        search = request.query_params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(event_type__icontains=search)
+                | Q(actor__icontains=search)
+                | Q(ip_address__icontains=search)
+            )
+
+        limit = min(int(request.query_params.get("limit", 100)), 500)
+        logs = qs[:limit]
+
+        return Response(
+            [
+                {
+                    "id": log.id,
+                    "timestamp": log.timestamp.isoformat(),
+                    "event_type": log.event_type,
+                    "actor": log.actor,
+                    "ip_address": log.ip_address,
+                    "user_agent": log.user_agent,
+                    "status_code": log.status_code,
+                    "severity": log.severity,
+                    "details": log.details,
+                }
+                for log in logs
+            ]
+        )
 
 
 @user_passes_test(lambda u: u.is_superuser, login_url="/admin/login/")
 def dashboard_view(request):
     """Serves the dashboard HTML."""
     return render(request, "dashboard.html")
+
 
 
 @api_view(["GET"])

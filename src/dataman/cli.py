@@ -271,7 +271,12 @@ def create_admin():
         "Use '*' for all scopes."
     ),
 )
-def create_token(name, scopes):
+@click.option(
+    "--expires-in",
+    default="30d",
+    help="Expiration duration (e.g. '30d', '7d', '24h', '1y', 'never'). Default is 30 days.",
+)
+def create_token(name, scopes, expires_in):
     """Generate a programmatic API token."""
     _ensure_initialized()
     django_setup.setup()
@@ -279,7 +284,10 @@ def create_token(name, scopes):
     import hashlib
     import json
     import secrets
+    from datetime import timedelta
+    from django.utils import timezone
 
+    from dataman.core.audit import log_audit_event
     from dataman.core.models import APIToken
 
     scope_list = [s.strip() for s in scopes.split(",")]
@@ -288,11 +296,48 @@ def create_token(name, scopes):
     secret = secrets.token_hex(16)
     hashed_secret = hashlib.sha256(secret.encode()).hexdigest()
 
-    APIToken.objects.create(
-        name=name, scopes=scope_list, prefix=prefix, hashed_secret=hashed_secret
+    expires_at = None
+    if expires_in and expires_in.lower() != "never":
+        now = timezone.now()
+        exp_str = expires_in.strip().lower()
+        if exp_str.endswith("d"):
+            expires_at = now + timedelta(days=int(exp_str[:-1]))
+        elif exp_str.endswith("h"):
+            expires_at = now + timedelta(hours=int(exp_str[:-1]))
+        elif exp_str.endswith("y"):
+            expires_at = now + timedelta(days=int(exp_str[:-1]) * 365)
+        elif exp_str.isdigit():
+            expires_at = now + timedelta(days=int(exp_str))
+
+    token = APIToken.objects.create(
+        name=name,
+        scopes=scope_list,
+        prefix=prefix,
+        hashed_secret=hashed_secret,
+        expires_at=expires_at,
+        is_active=True,
     )
+
+    log_audit_event(
+        event_type="TOKEN_GENERATED",
+        actor="CLI",
+        details={
+            "token_id": token.id,
+            "name": token.name,
+            "prefix": token.prefix,
+            "scopes": token.scopes,
+            "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+        },
+        severity="INFO",
+        status_code=201,
+    )
+
     click.echo(f"Created new token: {name}")
     click.echo(f"Scopes: {json.dumps(scope_list)}")
+    if expires_at:
+        click.echo(f"Expires: {expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    else:
+        click.echo("Expires: Never")
     click.echo(click.style(f"Token Key: {prefix}_{secret}", fg="green", bold=True))
     click.echo(
         click.style(
