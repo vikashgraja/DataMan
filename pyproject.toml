@@ -39,6 +39,7 @@ dependencies = [
     "dj-database-url>=2.3.0",
     "inflection>=0.5.1",
     "uvicorn>=0.34.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.scripts]
@@ -81,7 +82,7 @@ select = [
     "C4",
     "SIM",
 ]
-ignore = []
+ignore = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

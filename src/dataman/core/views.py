@@ -4,7 +4,7 @@ import io
 import json
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.contrib.auth.decorators import user_passes_test
 from django.db import connection
@@ -205,7 +205,10 @@ def parse_token_expiration(val):
 class APITokenViewSet(viewsets.ViewSet):
     """Internal ViewSet to manage APITokens from the dashboard."""
 
-    authentication_classes = [CsrfExemptSessionAuthentication, ServiceTokenAuthentication]
+    authentication_classes = [
+        CsrfExemptSessionAuthentication,
+        ServiceTokenAuthentication,
+    ]
     permission_classes = [IsAdminOrLocal]
 
     def list(self, request):
@@ -230,7 +233,11 @@ class APITokenViewSet(viewsets.ViewSet):
     def create(self, request):
         name = request.data.get("name")
         scopes = request.data.get("scopes", [])
-        expires_in = request.data.get("expires_in") or request.data.get("expires_in_days") or request.data.get("expires_at")
+        expires_in = (
+            request.data.get("expires_in")
+            or request.data.get("expires_in_days")
+            or request.data.get("expires_at")
+        )
 
         if not name:
             return Response(
@@ -250,7 +257,11 @@ class APITokenViewSet(viewsets.ViewSet):
             is_active=True,
         )
 
-        actor_name = str(request.user) if (request.user and request.user.is_authenticated) else "Admin"
+        actor_name = (
+            str(request.user)
+            if (request.user and request.user.is_authenticated)
+            else "Admin"
+        )
         log_audit_event(
             event_type="TOKEN_GENERATED",
             actor=actor_name,
@@ -260,7 +271,9 @@ class APITokenViewSet(viewsets.ViewSet):
                 "name": token.name,
                 "prefix": token.prefix,
                 "scopes": token.scopes,
-                "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+                "expires_at": token.expires_at.isoformat()
+                if token.expires_at
+                else None,
             },
             severity="INFO",
             status_code=201,
@@ -287,7 +300,11 @@ class APITokenViewSet(viewsets.ViewSet):
             token_prefix = token.prefix
             token.delete()
 
-            actor_name = str(request.user) if (request.user and request.user.is_authenticated) else "Admin"
+            actor_name = (
+                str(request.user)
+                if (request.user and request.user.is_authenticated)
+                else "Admin"
+            )
             log_audit_event(
                 event_type="TOKEN_REVOKED",
                 actor=actor_name,
@@ -309,9 +326,17 @@ class APITokenViewSet(viewsets.ViewSet):
 class AuditLogViewSet(viewsets.ViewSet):
     """Internal ViewSet to query and filter Audit Logs."""
 
-    authentication_classes = [CsrfExemptSessionAuthentication, ServiceTokenAuthentication]
+    authentication_classes = [
+        CsrfExemptSessionAuthentication,
+        ServiceTokenAuthentication,
+    ]
     permission_classes = [IsAdminOrLocal]
-    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, CSVRenderer, PlainJSONRenderer]
+    renderer_classes = [
+        JSONRenderer,
+        BrowsableAPIRenderer,
+        CSVRenderer,
+        PlainJSONRenderer,
+    ]
 
     def list(self, request):
         qs = AuditLog.objects.all().order_by("-timestamp")
@@ -455,7 +480,6 @@ def dashboard_view(request):
     return render(request, "dashboard.html")
 
 
-
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def health_live(request):
@@ -529,4 +553,3 @@ def health_ready(request):
 def health_check(request):
     """General health check endpoint combining liveness and readiness."""
     return health_ready(request._request)
-

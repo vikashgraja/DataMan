@@ -106,9 +106,7 @@ def setup():
             "dataman.core.auth.ServiceTokenAuthentication",
             "rest_framework.authentication.SessionAuthentication",
         ],
-        "DEFAULT_PAGINATION_CLASS": (
-            "rest_framework.pagination.PageNumberPagination"
-        ),
+        "DEFAULT_PAGINATION_CLASS": ("rest_framework.pagination.PageNumberPagination"),
         "PAGE_SIZE": page_size,
         "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     }
@@ -161,4 +159,3 @@ def get_wsgi_application():
     from django.core.wsgi import get_wsgi_application as django_get_wsgi
 
     return django_get_wsgi()
-

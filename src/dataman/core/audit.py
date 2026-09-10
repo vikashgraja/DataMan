@@ -1,6 +1,7 @@
+import contextlib
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 audit_logger = logging.getLogger("dataman.audit")
 
@@ -20,7 +21,12 @@ SENSITIVE_EXACT_KEYS = {
     "private_key",
     "secret_key",
     "cvv",
+    "cvv2",
     "pin",
+    "ssn",
+    "social_security",
+    "card_number",
+    "passcode",
 }
 
 SAFE_KEY_SUFFIXES = (
@@ -47,9 +53,7 @@ def is_sensitive_key(key: str) -> bool:
         for s_key in ("password", "secret", "credit_card", "api_key", "authorization")
     ):
         return True
-    if k_lower.endswith(("_token", "_secret", "_key")):
-        return True
-    return False
+    return k_lower.endswith(("_token", "_secret", "_key"))
 
 
 def sanitize_payload(data: Any) -> Any:
@@ -67,7 +71,7 @@ def sanitize_payload(data: Any) -> Any:
     return data
 
 
-def get_client_ip(request: Any) -> Optional[str]:
+def get_client_ip(request: Any) -> str | None:
     """Resolves client IP address taking proxies and load balancers into account."""
     if not request:
         return None
@@ -99,14 +103,14 @@ def get_user_agent(request: Any) -> str:
 
 def log_audit_event(
     event_type: str,
-    actor: Optional[str] = None,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    details: Optional[dict] = None,
+    actor: str | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    details: dict | None = None,
     severity: str = "INFO",
-    status_code: Optional[int] = None,
+    status_code: int | None = None,
     request: Any = None,
-) -> Optional[Any]:
+) -> Any | None:
     """
     Enterprise Audit Logging function:
     1. Extracts actor, IP, and User-Agent from request if available.
@@ -120,7 +124,11 @@ def log_audit_event(
         if not user_agent:
             user_agent = get_user_agent(request)
         if not actor:
-            if hasattr(request, "auth") and request.auth and hasattr(request.auth, "prefix"):
+            if (
+                hasattr(request, "auth")
+                and request.auth
+                and hasattr(request.auth, "prefix")
+            ):
                 actor = f"Token:{request.auth.prefix}"
             else:
                 user = getattr(request, "user", None)
@@ -142,10 +150,8 @@ def log_audit_event(
     }
 
     log_level = getattr(logging, severity.upper(), logging.INFO)
-    try:
+    with contextlib.suppress(Exception):
         audit_logger.log(log_level, json.dumps(log_payload, default=str))
-    except Exception:
-        pass
 
     # 2. Database model persistence
     try:

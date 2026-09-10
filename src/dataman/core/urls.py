@@ -1,4 +1,5 @@
 import concurrent.futures
+import contextlib
 import importlib
 import logging
 
@@ -20,6 +21,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from urllib3.util.retry import Retry
 
 from .audit import log_audit_event
+from .masking import mask_value
 from .views import (
     APITokenViewSet,
     AuditLogViewSet,
@@ -63,10 +65,8 @@ def dispatch_webhook(url, action, table_name, data):
 try:
     dataman_app = apps.get_app_config("dataman")
     for model in dataman_app.get_models():
-        try:
+        with contextlib.suppress(Exception):
             admin.site.register(model)
-        except Exception:
-            pass
 
         model_name = model.__name__
 
@@ -83,6 +83,8 @@ try:
         webhook_url = None
         rate_limit = None
         depth = None
+        masked_fields = {}
+        unmask_scopes = [f"{model_name.lower()}:unmask"]
         try:
             config_module = importlib.import_module(f"tables.{model_name}.config")
             if hasattr(config_module, "ALLOWED_OPERATIONS"):
@@ -103,6 +105,10 @@ try:
                 rate_limit = config_module.RATE_LIMIT
             if hasattr(config_module, "DEPTH"):
                 depth = config_module.DEPTH
+            if hasattr(config_module, "MASKED_FIELDS"):
+                masked_fields = config_module.MASKED_FIELDS
+            if hasattr(config_module, "UNMASK_SCOPES"):
+                unmask_scopes = config_module.UNMASK_SCOPES
         except ModuleNotFoundError:
             pass  # nosec B110
 
@@ -157,6 +163,41 @@ try:
                     return v_mod.validate(data)
             return data
 
+        def custom_to_representation(
+            self, instance, m_fields=masked_fields, u_scopes=unmask_scopes
+        ):
+            rep = super(self.__class__, self).to_representation(instance)
+            if not m_fields:
+                return rep
+
+            request = self.context.get("request")
+            allow_unmasked = False
+
+            if request:
+                user = getattr(request, "user", None)
+                if user and getattr(user, "is_superuser", False):
+                    allow_unmasked = True
+                elif (
+                    hasattr(request, "auth")
+                    and request.auth
+                    and hasattr(request.auth, "scopes")
+                ):
+                    token_scopes = request.auth.scopes or []
+                    if "*" in token_scopes or any(s in token_scopes for s in u_scopes):
+                        allow_unmasked = True
+
+            if not allow_unmasked:
+                field_strategies = (
+                    m_fields
+                    if isinstance(m_fields, dict)
+                    else dict.fromkeys(m_fields, "partial")
+                )
+                for field_name, strategy in field_strategies.items():
+                    if field_name in rep and rep[field_name] is not None:
+                        rep[field_name] = mask_value(rep[field_name], strategy)
+
+            return rep
+
         class Meta:
             model = model
             fields = "__all__"
@@ -164,7 +205,11 @@ try:
         serializer_class = type(
             f"{model_name}Serializer",
             (serializers.ModelSerializer,),
-            {"Meta": Meta, "validate": custom_validate},
+            {
+                "Meta": Meta,
+                "validate": custom_validate,
+                "to_representation": custom_to_representation,
+            },
         )
 
         read_serializer_class = serializer_class
@@ -178,7 +223,11 @@ try:
             read_serializer_class = type(
                 f"{model_name}ReadSerializer",
                 (serializers.ModelSerializer,),
-                {"Meta": ReadMeta, "validate": custom_validate},
+                {
+                    "Meta": ReadMeta,
+                    "validate": custom_validate,
+                    "to_representation": custom_to_representation,
+                },
             )
 
         # Permissions
@@ -384,9 +433,7 @@ urlpatterns = [
         "api/_internal/analytics/summary/", analytics_summary, name="analytics-summary"
     ),
     path("api/_internal/analytics/logs/", analytics_logs, name="analytics-logs"),
-    path(
-        "api/_internal/analytics/export/", analytics_export, name="analytics-export"
-    ),
+    path("api/_internal/analytics/export/", analytics_export, name="analytics-export"),
     path("api/_internal/", include(internal_router.urls)),
     path("dashboard/", dashboard_view, name="dashboard"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),

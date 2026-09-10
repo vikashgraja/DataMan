@@ -53,38 +53,38 @@ def init():
     with open(database_file, "w") as f:
         f.write(
             '"""\n'
-            'DataMan Database Configuration\n'
-            'Configure your primary and replica database connections here.\n'
+            "DataMan Database Configuration\n"
+            "Configure your primary and replica database connections here.\n"
             '"""\n'
-            'import os\n'
-            'from pathlib import Path\n'
-            'import dj_database_url\n\n'
-            'BASE_DIR = Path(__file__).resolve().parent\n\n'
-            '# Default SQLite database configuration\n'
-            'DATABASES = {\n'
+            "import os\n"
+            "from pathlib import Path\n"
+            "import dj_database_url\n\n"
+            "BASE_DIR = Path(__file__).resolve().parent\n\n"
+            "# Default SQLite database configuration\n"
+            "DATABASES = {\n"
             '    "default": dj_database_url.config(\n'
             '        default=os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/db.sqlite3"),\n'
-            '        conn_max_age=600,\n'
-            '        conn_health_checks=True,\n'
-            '    )\n'
-            '}\n\n'
-            '# --- Examples for Other Database Engines ---\n'
-            '# PostgreSQL (Production recommended):\n'
-            '# DATABASES = {\n'
+            "        conn_max_age=600,\n"
+            "        conn_health_checks=True,\n"
+            "    )\n"
+            "}\n\n"
+            "# --- Examples for Other Database Engines ---\n"
+            "# PostgreSQL (Production recommended):\n"
+            "# DATABASES = {\n"
             '#     "default": dj_database_url.parse(\n'
             '#         os.getenv("DATABASE_URL", "postgres://user:password@localhost:5432/dataman_db"),\n'
-            '#         conn_max_age=600,\n'
-            '#         conn_health_checks=True,\n'
-            '#     )\n'
-            '# }\n'
-            '#\n'
-            '# MySQL / MariaDB:\n'
-            '# DATABASES = {\n'
+            "#         conn_max_age=600,\n"
+            "#         conn_health_checks=True,\n"
+            "#     )\n"
+            "# }\n"
+            "#\n"
+            "# MySQL / MariaDB:\n"
+            "# DATABASES = {\n"
             '#     "default": dj_database_url.parse(\n'
             '#         os.getenv("DATABASE_URL", "mysql://user:password@localhost:3306/dataman_db"),\n'
-            '#         conn_max_age=600,\n'
-            '#     )\n'
-            '# }\n'
+            "#         conn_max_age=600,\n"
+            "#     )\n"
+            "# }\n"
         )
     click.echo(click.style("Created database.py.", fg="green"))
 
@@ -92,23 +92,23 @@ def init():
     with open(config_file, "w") as f:
         f.write(
             '"""\n'
-            'DataMan Project Configuration\n'
-            'Customize global settings, security policies, CORS, pagination, and middleware.\n'
+            "DataMan Project Configuration\n"
+            "Customize global settings, security policies, CORS, pagination, and middleware.\n"
             '"""\n'
-            'import os\n\n'
-            '# Security & Environment\n'
+            "import os\n\n"
+            "# Security & Environment\n"
             'DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")\n'
             'ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]\n\n'
-            '# Global Pagination & Throttling\n'
-            'PAGE_SIZE = 100\n'
-            'MAX_PAGE_SIZE = 500\n\n'
-            '# Audit & Telemetry\n'
-            'ENABLE_AUDIT_LOGGING = True\n'
-            'ENABLE_TELEMETRY = True\n\n'
-            '# Custom Installed Apps (e.g. third-party Django apps)\n'
-            'EXTRA_INSTALLED_APPS = []\n\n'
-            '# Custom Middleware (appended to request/response pipeline)\n'
-            'EXTRA_MIDDLEWARE = []\n'
+            "# Global Pagination & Throttling\n"
+            "PAGE_SIZE = 100\n"
+            "MAX_PAGE_SIZE = 500\n\n"
+            "# Audit & Telemetry\n"
+            "ENABLE_AUDIT_LOGGING = True\n"
+            "ENABLE_TELEMETRY = True\n\n"
+            "# Custom Installed Apps (e.g. third-party Django apps)\n"
+            "EXTRA_INSTALLED_APPS = []\n\n"
+            "# Custom Middleware (appended to request/response pipeline)\n"
+            "EXTRA_MIDDLEWARE = []\n"
         )
     click.echo(click.style("Created config.py.", fg="green"))
 
@@ -181,14 +181,28 @@ def create_table(name, operations):
         f.write(f"TABLE_SCOPES = {scopes}\n")
         f.write("THROTTLE_RATES = {'anon': '100/day', 'user': '1000/day'}\n")
         f.write("WEBHOOK_URLS = []\n")
-        f.write("DEPTH = 0  # Set to 1 or higher to automatically serialize nested relationships\n")
-        f.write("# FILTER_FIELDS = {'price': ['gte', 'lte', 'exact'], 'name': ['icontains']}  # or ['name', 'price']\n")
+        f.write(
+            "DEPTH = 0  # Set to 1 or higher to automatically serialize nested relationships\n"
+        )
+        f.write(
+            "# FILTER_FIELDS = {'price': ['gte', 'lte', 'exact'], 'name': ['icontains']}  # or ['name', 'price']\n"
+        )
         f.write("# SEARCH_FIELDS = ['name']\n")
         f.write("# ORDERING_FIELDS = ['created_at', 'price']\n")
+        f.write(
+            "# Dynamic Masking (e.g., 'partial', 'last4', 'email', 'phone', 'full'):\n"
+        )
+        f.write(
+            "# MASKED_FIELDS = {'ssn': 'partial', 'card_number': 'last4', 'email': 'email'}\n"
+        )
+        f.write(f"# UNMASK_SCOPES = ['{table_name.lower()}:unmask']\n")
 
     # Write models.py
     with open(table_dir / "models.py", "w") as f:
-        f.write("from django.db import models\n\n")
+        f.write("from django.db import models\n")
+        f.write(
+            "# from dataman.core.fields import EncryptedCharField, EncryptedTextField, EncryptedEmailField\n\n\n"
+        )
         f.write(f"class {table_name}(models.Model):\n")
         f.write("    # Add your fields here\n")
         f.write("    created_at = models.DateTimeField(auto_now_add=True)\n")
@@ -350,6 +364,7 @@ def create_token(name, scopes, expires_in):
     import json
     import secrets
     from datetime import timedelta
+
     from django.utils import timezone
 
     from dataman.core.audit import log_audit_event
@@ -450,8 +465,10 @@ def export_audit(format, output, event_type, severity, actor, search, limit):
 
     import csv
     import json
+
     from django.db.models import Q
     from django.utils import timezone
+
     from dataman.core.models import AuditLog
 
     qs = AuditLog.objects.all().order_by("-timestamp")
@@ -554,7 +571,9 @@ def export_telemetry(format, output, limit):
 
     import csv
     import json
+
     from django.utils import timezone
+
     from dataman.core.models import APILog
 
     records = list(APILog.objects.all().order_by("-timestamp")[:limit])

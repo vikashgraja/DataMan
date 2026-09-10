@@ -81,4 +81,3 @@ class HasTableScope(permissions.BasePermission):
                 status_code=403,
             )
         return has_scope
-

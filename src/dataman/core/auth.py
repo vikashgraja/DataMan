@@ -1,4 +1,5 @@
 import hashlib
+
 from django.utils import timezone
 from rest_framework import authentication, exceptions
 
@@ -55,7 +56,11 @@ class ServiceTokenAuthentication(authentication.BaseAuthentication):
                     event_type="TOKEN_AUTH_FAILED",
                     actor=f"Token:{prefix}",
                     request=request,
-                    details={"prefix": prefix, "token_name": token.name, "reason": "Token is disabled"},
+                    details={
+                        "prefix": prefix,
+                        "token_name": token.name,
+                        "reason": "Token is disabled",
+                    },
                     severity="WARNING",
                     status_code=401,
                 )
@@ -82,7 +87,10 @@ class ServiceTokenAuthentication(authentication.BaseAuthentication):
                 event_type="TOKEN_AUTH_FAILED",
                 actor=f"Token:{prefix}" if prefix else "Unknown",
                 request=request,
-                details={"prefix": prefix, "reason": "Token prefix not found or invalid format"},
+                details={
+                    "prefix": prefix,
+                    "reason": "Token prefix not found or invalid format",
+                },
                 severity="WARNING",
                 status_code=401,
             )
@@ -96,5 +104,3 @@ class CsrfExemptSessionAuthentication(authentication.SessionAuthentication):
 
     def enforce_csrf(self, request):
         return  # Skip CSRF check for authenticated dashboard session
-
-
