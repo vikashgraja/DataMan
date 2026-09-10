@@ -36,7 +36,7 @@ def setup():
     allowed_hosts = [h.strip() for h in allowed_hosts_env.split(",") if h.strip()]
 
     settings.configure(
-        SECRET_KEY=os.getenv("DATAMAN_SECRET_KEY", "dataman-insecure-secret-key"),
+        SECRET_KEY=os.getenv("DATAMAN_SECRET_KEY"),
         DEBUG=os.getenv("DEBUG", "False").lower() in ("true", "1", "yes"),
         ALLOWED_HOSTS=allowed_hosts,
         LOGIN_URL="/admin/login/",
