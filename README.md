@@ -41,16 +41,35 @@ Run the following in an empty directory to scaffold the necessary environment:
 ```bash
 dataman init
 ```
-This generates your `tables/` directory and `.env` file.
+This generates your project configuration:
+```text
+my-project/
+├── .env           # Environment variables & secrets
+├── database.py    # Database connection & pooling (SQLite default, Postgres, MySQL)
+├── config.py      # Project settings (Hosts, CORS, pagination, custom middleware)
+└── tables/        # API tables & database migrations
+```
 
-### 2. Create a Table
+### 2. Configure Database & Project Settings (Optional)
+Easily customize your database backend in `database.py` (e.g., PostgreSQL or MySQL) and global settings in `config.py`:
+```python
+# database.py
+DATABASES = {
+    "default": dj_database_url.config(
+        default="postgres://user:pass@localhost:5432/my_db",
+        conn_max_age=600,
+    )
+}
+```
+
+### 3. Create a Table
 Scaffold a new table (e.g., `Customer`) with full CRUD operations (`-o crud`):
 ```bash
 dataman create table Customer -o crud
 ```
 
-### 3. Define Your Fields
-Open the generated `tables/Customer/model.py` and define your Django fields:
+### 4. Define Your Fields
+Open the generated `tables/Customer/models.py` and define your Django fields:
 ```python
 from django.db import models
 
