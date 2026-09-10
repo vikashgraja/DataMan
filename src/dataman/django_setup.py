@@ -39,6 +39,7 @@ def setup():
         SECRET_KEY=os.getenv("DATAMAN_SECRET_KEY", "dataman-insecure-secret-key"),
         DEBUG=os.getenv("DEBUG", "False").lower() in ("true", "1", "yes"),
         ALLOWED_HOSTS=allowed_hosts,
+        LOGIN_URL="/admin/login/",
         INSTALLED_APPS=[
             "django.contrib.admin",
             "django.contrib.auth",

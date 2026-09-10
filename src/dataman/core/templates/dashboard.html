@@ -485,11 +485,32 @@
         }
 
         // --- API Calls ---
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
         async function fetchAPI(url, options = {}) {
             try {
+                const csrfToken = getCookie('csrftoken');
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
+                    ...options.headers
+                };
                 const res = await fetch(url, {
                     ...options,
-                    headers: { 'Content-Type': 'application/json', ...options.headers }
+                    headers: headers
                 });
                 if(!res.ok) throw new Error(`HTTP ${res.status}`);
                 if(res.status === 204) return null;

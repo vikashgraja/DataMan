@@ -60,6 +60,11 @@ def dispatch_webhook(url, action, table_name, data):
 try:
     dataman_app = apps.get_app_config("dataman")
     for model in dataman_app.get_models():
+        try:
+            admin.site.register(model)
+        except Exception:
+            pass
+
         model_name = model.__name__
 
         if model_name in ("APIToken", "APILog"):

@@ -8,9 +8,10 @@ from django.db.migrations.executor import MigrationExecutor
 from django.db.models import Avg, Count
 from django.shortcuts import render
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 
+from .auth import CsrfExemptSessionAuthentication, ServiceTokenAuthentication
 from .models import APILog, APIToken
 
 
@@ -27,6 +28,7 @@ class IsAdminOrLocal(permissions.BasePermission):
 
 
 @api_view(["GET"])
+@authentication_classes([CsrfExemptSessionAuthentication, ServiceTokenAuthentication])
 @permission_classes([IsAdminOrLocal])
 def analytics_summary(request):
     """Returns aggregated API usage metrics."""
@@ -51,6 +53,7 @@ def analytics_summary(request):
 
 
 @api_view(["GET"])
+@authentication_classes([CsrfExemptSessionAuthentication, ServiceTokenAuthentication])
 @permission_classes([IsAdminOrLocal])
 def analytics_logs(request):
     """Returns the 50 most recent API logs."""
@@ -73,6 +76,7 @@ def analytics_logs(request):
 class APITokenViewSet(viewsets.ViewSet):
     """Internal ViewSet to manage APITokens from the dashboard."""
 
+    authentication_classes = [CsrfExemptSessionAuthentication, ServiceTokenAuthentication]
     permission_classes = [IsAdminOrLocal]
 
     def list(self, request):
@@ -130,7 +134,7 @@ class APITokenViewSet(viewsets.ViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
 
-@user_passes_test(lambda u: u.is_superuser)
+@user_passes_test(lambda u: u.is_superuser, login_url="/admin/login/")
 def dashboard_view(request):
     """Serves the dashboard HTML."""
     return render(request, "dashboard.html")

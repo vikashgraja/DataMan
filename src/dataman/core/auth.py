@@ -42,3 +42,11 @@ class ServiceTokenAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed("Invalid token.") from e
 
         return (ServiceUser(), token)
+
+
+class CsrfExemptSessionAuthentication(authentication.SessionAuthentication):
+    """SessionAuthentication that does not enforce CSRF checks for internal dashboard APIs."""
+
+    def enforce_csrf(self, request):
+        return  # Skip CSRF check for authenticated dashboard session
+
