@@ -85,6 +85,15 @@ Control exactly what HTTP methods are exposed and whether the table requires aut
 ALLOWED_OPERATIONS = ["C", "R"]  # Only allow Create (POST) and Read (GET)
 REQUIRE_AUTH = True  # Lock down this endpoint
 DEPTH = 1  # Automatically serialize nested Foreign Key relationships on read (GET)
+
+# Advanced Filtering, Search & Ordering
+FILTER_FIELDS = {
+    "price": ["gte", "lte", "exact"],
+    "name": ["icontains", "exact"],
+    "is_active": ["exact"],
+}  # Or simple list: ["name", "email"]
+SEARCH_FIELDS = ["name", "email"]
+ORDERING_FIELDS = ["created_at", "price"]
 ```
 
 ### 2. Authentication & Scopes

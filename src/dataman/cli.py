@@ -117,6 +117,9 @@ def create_table(name, operations):
         f.write("THROTTLE_RATES = {'anon': '100/day', 'user': '1000/day'}\n")
         f.write("WEBHOOK_URLS = []\n")
         f.write("DEPTH = 0  # Set to 1 or higher to automatically serialize nested relationships\n")
+        f.write("# FILTER_FIELDS = {'price': ['gte', 'lte', 'exact'], 'name': ['icontains']}  # or ['name', 'price']\n")
+        f.write("# SEARCH_FIELDS = ['name']\n")
+        f.write("# ORDERING_FIELDS = ['created_at', 'price']\n")
 
     # Write models.py
     with open(table_dir / "models.py", "w") as f:
