@@ -498,42 +498,72 @@ def health_ready(request):
     is_healthy = True
 
     # 1. Database connectivity check
-    db_start = time.time()
-    try:
-        connection.ensure_connection()
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
-        db_latency = round((time.time() - db_start) * 1000, 2)
-        checks["database"] = {
-            "status": "connected",
-            "vendor": connection.vendor,
-            "latency_ms": db_latency,
-        }
-    except Exception as e:
-        is_healthy = False
-        checks["database"] = {
-            "status": "disconnected",
-            "error": str(e),
-        }
+    from django.db import connection, connections
+
+    db_checks = {}
+    default_db_info = None
+
+    for alias in connections:
+        conn = connections[alias]
+        db_start = time.time()
+        try:
+            conn.ensure_connection()
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            db_latency = round((time.time() - db_start) * 1000, 2)
+            info = {
+                "status": "connected",
+                "vendor": conn.vendor,
+                "latency_ms": db_latency,
+            }
+            db_checks[alias] = info
+            if alias == "default" or default_db_info is None:
+                default_db_info = info
+        except Exception as e:
+            is_healthy = False
+            info = {
+                "status": "disconnected",
+                "error": str(e),
+            }
+            db_checks[alias] = info
+            if alias == "default" or default_db_info is None:
+                default_db_info = info
+
+    checks["databases"] = db_checks
+    checks["database"] = default_db_info or {
+        "status": "disconnected",
+        "error": "No database configured",
+    }
 
     # 2. Migrations check
-    try:
-        executor = MigrationExecutor(connection)
-        targets = executor.loader.graph.leaf_nodes()
-        unapplied_count = len(executor.migration_plan(targets))
-        checks["migrations"] = {
-            "status": "applied" if unapplied_count == 0 else "pending",
-            "unapplied_count": unapplied_count,
-        }
-        if unapplied_count > 0:
+    total_unapplied = 0
+    all_migrations = {}
+    for alias in connections:
+        conn = connections[alias]
+        try:
+            executor = MigrationExecutor(conn)
+            targets = executor.loader.graph.leaf_nodes()
+            unapplied = len(executor.migration_plan(targets))
+            total_unapplied += unapplied
+            all_migrations[alias] = {
+                "status": "applied" if unapplied == 0 else "pending",
+                "unapplied_count": unapplied,
+            }
+            if unapplied > 0:
+                is_healthy = False
+        except Exception as e:
             is_healthy = False
-    except Exception as e:
-        is_healthy = False
-        checks["migrations"] = {
-            "status": "error",
-            "error": str(e),
-        }
+            all_migrations[alias] = {
+                "status": "error",
+                "error": str(e),
+            }
+
+    checks["all_migrations"] = all_migrations
+    checks["migrations"] = {
+        "status": "applied" if total_unapplied == 0 and is_healthy else ("pending" if total_unapplied > 0 else "error"),
+        "unapplied_count": total_unapplied,
+    }
 
     resp_status = (
         status.HTTP_200_OK if is_healthy else status.HTTP_503_SERVICE_UNAVAILABLE

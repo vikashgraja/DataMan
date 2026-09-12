@@ -12,6 +12,7 @@
 - **Fine-Grained Authentication**: Lock down endpoints using granular, table-and-operation specific scopes (e.g., `customer:read`, `order:write`).
 - **Dynamic Routing & Pagination**: Built-in DRF integration with default pagination and dynamic URL mappings.
 - **Production Health Probes**: Built-in `/health/live/` and `/health/ready/` endpoints for Kubernetes/Docker container monitoring, database vitality, and migration checks.
+- **Multi-Database Routing**: Organize tables by database directory (`<database>/<table>`) and route traffic, migrations, and health checks across isolated databases.
 - **ASGI High-Concurrency Engine**: Built-in `uvicorn` server execution mode (`dataman server start --asgi`) for high throughput asynchronous performance.
 
 ---
@@ -168,6 +169,42 @@ DataMan comes with built-in health check endpoints designed for cloud platforms,
 * `GET /health/live/` (or `/api/health/live/`): Liveness probe returning `200 OK` indicating the process is alive.
 * `GET /health/ready/` (or `/api/health/ready/`): Readiness probe validating active database connection integrity and unapplied migrations (returns `200 OK` or `503 Service Unavailable`).
 * `GET /health/` (or `/api/health/`): Unified health status with database latency metrics.
+
+### 6. Multi-Database Architecture
+Organize large projects with isolated physical databases:
+
+```text
+my_project/
+├── database.py
+├── config.py
+├── analytics_db/
+│   ├── events/
+│   │   ├── models.py
+│   │   └── config.py
+│   └── metrics/
+│       ├── models.py
+│       └── config.py
+└── core_db/
+    └── users/
+        ├── models.py
+        └── config.py
+```
+
+1. Create a database:
+```bash
+dataman create database analytics_db
+```
+2. Scaffold a table bound to that database:
+```bash
+dataman create table events --database analytics_db
+```
+3. Run migrations across all databases (or target a single database):
+```bash
+dataman migrate
+# or
+dataman migrate --database analytics_db
+```
+Endpoints are automatically registered at both `api/<table_name>/` and namespaced `api/<database_name>/<table_name>/`.
 
 ---
 

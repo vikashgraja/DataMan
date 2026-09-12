@@ -19,15 +19,29 @@ def setup():
     # Load environment variables
     env_path = cwd / ".env"
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=True)
 
-    # Ensure tables directory exists for migrations
+    # Determine project context
     tables_dir = cwd / "tables"
-    if tables_dir.exists():
-        migrations_dir = tables_dir / "migrations"
-        if not migrations_dir.exists():
-            migrations_dir.mkdir()
-            (migrations_dir / "__init__.py").touch()
+    databases_dir = cwd / "databases"
+    is_project = (
+        (cwd / "database.py").exists()
+        or (cwd / "config.py").exists()
+        or tables_dir.exists()
+        or databases_dir.exists()
+    )
+
+    # Ensure migrations directory exists only in initialized projects
+    migration_module = None
+    migrations_dir = cwd / "migrations"
+    if tables_dir.exists() and (tables_dir / "migrations").exists():
+        migration_module = "tables.migrations"
+    elif migrations_dir.exists():
+        migration_module = "migrations"
+    elif is_project:
+        migrations_dir.mkdir(parents=True, exist_ok=True)
+        (migrations_dir / "__init__.py").touch()
+        migration_module = "migrations"
 
     import dj_database_url
 
@@ -42,9 +56,12 @@ def setup():
         pass
 
     if not databases_config:
+        default_db_url = (
+            f"sqlite:///{cwd}/db.sqlite3" if is_project else "sqlite:///:memory:"
+        )
         databases_config = {
             "default": dj_database_url.config(
-                default=f"sqlite:///{cwd}/db.sqlite3",
+                default=default_db_url,
                 conn_max_age=600,
             )
         }
@@ -65,10 +82,13 @@ def setup():
         debug_val = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
 
     if project_config and hasattr(project_config, "ALLOWED_HOSTS"):
-        allowed_hosts = project_config.ALLOWED_HOSTS
+        allowed_hosts = list(project_config.ALLOWED_HOSTS)
     else:
         allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "*")
         allowed_hosts = [h.strip() for h in allowed_hosts_env.split(",") if h.strip()]
+
+    if "*" not in allowed_hosts and "testserver" not in allowed_hosts:
+        allowed_hosts.append("testserver")
 
     page_size = getattr(project_config, "PAGE_SIZE", 100) if project_config else 100
     extra_apps = (
@@ -113,6 +133,15 @@ def setup():
     if project_config and hasattr(project_config, "REST_FRAMEWORK"):
         rest_framework_settings.update(project_config.REST_FRAMEWORK)
 
+    # Load database routers
+    database_routers = ["dataman.core.router.DataManDatabaseRouter"]
+    if project_config and hasattr(project_config, "DATABASE_ROUTERS"):
+        database_routers = list(project_config.DATABASE_ROUTERS)
+
+    migration_modules_dict = {}
+    if migration_module:
+        migration_modules_dict["dataman"] = migration_module
+
     settings.configure(
         SECRET_KEY=os.getenv("DATAMAN_SECRET_KEY", "default-insecure-key-change-me"),
         DEBUG=debug_val,
@@ -121,7 +150,8 @@ def setup():
         INSTALLED_APPS=installed_apps,
         REST_FRAMEWORK=rest_framework_settings,
         DATABASES=databases_config,
-        MIGRATION_MODULES={"dataman": "tables.migrations"},
+        DATABASE_ROUTERS=database_routers,
+        MIGRATION_MODULES=migration_modules_dict,
         ROOT_URLCONF="dataman.core.urls",
         MIDDLEWARE=middleware,
         TEMPLATES=[

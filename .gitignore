@@ -10,6 +10,14 @@ wheels/
 .venv
 .DS_Store
 
+# Databases & Migrations
+*.sqlite3
+*.db
+db.sqlite3
+/migrations/
+
 # testing
 test_project/
 scratch/
+.coverage
+htmlcov/

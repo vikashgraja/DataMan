@@ -61,10 +61,35 @@ class HasTableScope(permissions.BasePermission):
             )
             return False
 
+        from dataman.core.models import TABLE_REGISTRY
+
+        clean_table = table_name.split("-")[-1]
+        required_scope = f"{clean_table}:{action}"
+        namespaced_scope = f"{table_name}:{action}"
+
+        possible_scopes = {
+            required_scope,
+            namespaced_scope,
+            f"{clean_table}:*",
+            f"{table_name}:*",
+        }
+
+        reg_entry = TABLE_REGISTRY.get(table_name) or TABLE_REGISTRY.get(clean_table)
+        if reg_entry and "database" in reg_entry:
+            db_name = reg_entry["database"]
+            possible_scopes.update({
+                f"{db_name}-{clean_table}:{action}",
+                f"{db_name}-{clean_table}:*",
+                f"{db_name}:{clean_table}:{action}",
+                f"{db_name}:{clean_table}:*",
+                f"{db_name}:{action}",
+                f"{db_name}:*",
+            })
+
         if "*" in token.scopes:
             return True
 
-        has_scope = required_scope in token.scopes
+        has_scope = any(s in token.scopes for s in possible_scopes)
         if not has_scope:
             log_audit_event(
                 event_type="PERMISSION_DENIED",

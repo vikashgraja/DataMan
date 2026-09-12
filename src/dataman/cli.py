@@ -10,7 +10,8 @@ from dataman import django_setup
 
 def _ensure_initialized():
     """Helper to ensure the current directory is a DataMan project."""
-    if not Path(".env").exists() or not Path("tables").is_dir():
+    cwd = Path.cwd()
+    if not (cwd / ".env").exists() or not (cwd / "database.py").exists():
         click.echo(
             click.style(
                 "Error: Not a DataMan project. Run 'dataman init' first.", fg="red"
@@ -30,11 +31,12 @@ def init():
     """Initialize a new DataMan project in the current directory."""
     cwd = Path.cwd()
     env_path = cwd / ".env"
-    tables_dir = cwd / "tables"
     database_file = cwd / "database.py"
     config_file = cwd / "config.py"
+    tables_dir = cwd / "tables"
+    migrations_dir = tables_dir / "migrations"
 
-    if env_path.exists() or tables_dir.exists():
+    if env_path.exists() and (database_file.exists() or tables_dir.exists()):
         click.echo(
             click.style("Project already initialized in this directory.", fg="yellow")
         )
@@ -70,21 +72,17 @@ def init():
             "}\n\n"
             "# --- Examples for Other Database Engines ---\n"
             "# PostgreSQL (Production recommended):\n"
-            "# DATABASES = {\n"
-            '#     "default": dj_database_url.parse(\n'
-            '#         os.getenv("DATABASE_URL", "postgres://user:password@localhost:5432/dataman_db"),\n'
-            "#         conn_max_age=600,\n"
-            "#         conn_health_checks=True,\n"
-            "#     )\n"
-            "# }\n"
+            '# DATABASES["analytics"] = dj_database_url.parse(\n'
+            '#     os.getenv("ANALYTICS_DATABASE_URL", "postgres://user:password@localhost:5432/analytics_db"),\n'
+            "#     conn_max_age=600,\n"
+            "#     conn_health_checks=True,\n"
+            "# )\n"
             "#\n"
             "# MySQL / MariaDB:\n"
-            "# DATABASES = {\n"
-            '#     "default": dj_database_url.parse(\n'
-            '#         os.getenv("DATABASE_URL", "mysql://user:password@localhost:3306/dataman_db"),\n'
-            "#         conn_max_age=600,\n"
-            "#     )\n"
-            "# }\n"
+            '# DATABASES["legacy"] = dj_database_url.parse(\n'
+            '#     os.getenv("LEGACY_DATABASE_URL", "mysql://user:password@localhost:3306/legacy_db"),\n'
+            "#     conn_max_age=600,\n"
+            "# )\n"
         )
     click.echo(click.style("Created database.py.", fg="green"))
 
@@ -112,15 +110,12 @@ def init():
         )
     click.echo(click.style("Created config.py.", fg="green"))
 
-    # Create tables directory
-    tables_dir.mkdir()
+    # Create tables/ directory and migrations
+    tables_dir.mkdir(exist_ok=True)
     (tables_dir / "__init__.py").touch()
-    click.echo(click.style("Created tables/ directory.", fg="green"))
-
-    # Generate initial migrations package
-    migrations_dir = tables_dir / "migrations"
-    migrations_dir.mkdir()
+    migrations_dir.mkdir(exist_ok=True)
     (migrations_dir / "__init__.py").touch()
+    click.echo(click.style("Created tables/ directory.", fg="green"))
 
     click.echo(
         click.style("DataMan project initialized successfully!", fg="green", bold=True)
@@ -129,19 +124,78 @@ def init():
 
 @cli.group()
 def create():
-    """Create resources like tables."""
+    """Create resources like databases and tables."""
     pass
+
+
+@create.command(name="database")
+@click.argument("name")
+def create_database(name):
+    """Scaffold a new database directory and configuration."""
+    _ensure_initialized()
+
+    db_name = inflection.underscore(name)
+    if "/" in db_name or "\\" in db_name or "." in db_name or not db_name.isidentifier():
+        click.echo(click.style(f"Invalid database name: '{db_name}'.", fg="red"))
+        raise click.Abort()
+
+    db_dir = Path.cwd() / db_name
+    if db_dir.exists():
+        click.echo(click.style(f"Database directory '{db_name}' already exists.", fg="yellow"))
+        raise click.Abort()
+
+    db_dir.mkdir(parents=True)
+    (db_dir / "__init__.py").touch()
+
+    # Append database configuration to database.py if not already present
+    database_file = Path.cwd() / "database.py"
+    if database_file.exists():
+        import re
+
+        content = database_file.read_text(encoding="utf-8")
+        has_active_entry = bool(
+            re.search(
+                r'^\s*DATABASES\s*\[\s*["\']' + re.escape(db_name) + r'["\']\s*\]\s*=',
+                content,
+                re.MULTILINE,
+            )
+        )
+        if not has_active_entry:
+            entry = (
+                f'\nDATABASES["{db_name}"] = dj_database_url.config(\n'
+                f'    env="{db_name.upper()}_DATABASE_URL",\n'
+                f'    default=f"sqlite:///{{BASE_DIR}}/{db_name}.sqlite3",\n'
+                f'    conn_max_age=600,\n'
+                f'    conn_health_checks=True,\n'
+                f')\n'
+            )
+            with open(database_file, "a", encoding="utf-8") as f:
+                f.write(entry)
+
+    click.echo(
+        click.style(
+            f"Successfully created database directory and configuration for '{db_name}'!",
+            fg="green",
+            bold=True,
+        )
+    )
 
 
 @create.command(name="table")
 @click.argument("name")
+@click.option(
+    "--database",
+    "-d",
+    default=None,
+    help="Target database name for this table (e.g. 'default', 'analytics').",
+)
 @click.option(
     "--operations",
     "-o",
     default="crud",
     help="Allowed operations: c (create), r (read), u (update), d (delete).",
 )
-def create_table(name, operations):
+def create_table(name, database, operations):
     """Scaffold a new database table and API endpoint."""
     _ensure_initialized()
 
@@ -161,7 +215,24 @@ def create_table(name, operations):
         )
         raise click.Abort()
 
-    table_dir = Path.cwd() / "tables" / table_name
+    cwd = Path.cwd()
+    target_db = database.strip() if database else "default"
+
+    # Determine table directory location
+    if database and (cwd / "databases" / target_db).exists():
+        table_dir = cwd / "databases" / target_db / table_name
+    elif database and (cwd / target_db).is_dir():
+        table_dir = cwd / target_db / table_name
+    elif database:
+        target_db_dir = cwd / target_db
+        target_db_dir.mkdir(parents=True, exist_ok=True)
+        (target_db_dir / "__init__.py").touch()
+        table_dir = target_db_dir / table_name
+    elif (cwd / "tables").is_dir():
+        table_dir = cwd / "tables" / table_name
+    else:
+        table_dir = cwd / "tables" / table_name
+        table_dir.parent.mkdir(parents=True, exist_ok=True)
 
     if table_dir.exists():
         click.echo(click.style(f"Table '{table_name}' already exists.", fg="yellow"))
@@ -175,6 +246,7 @@ def create_table(name, operations):
 
     # Write config.py
     with open(table_dir / "config.py", "w") as f:
+        f.write(f'DATABASE = "{target_db}"\n')
         f.write(f"ALLOWED_OPERATIONS = {ops_list}\n")
         f.write("REQUIRE_AUTH = True\n")
         scopes = [f"{table_name.lower()}:read", f"{table_name.lower()}:write"]
@@ -239,11 +311,12 @@ def create_table(name, operations):
             "# Define custom tracking or metrics hooks for this table here.\n"
         )
 
-    click.echo(
-        click.style(
-            f"Successfully created table structure for {table_name}!", fg="green"
-        )
+    msg = (
+        f"Successfully created table structure for {table_name} in database '{target_db}'!"
+        if database
+        else f"Successfully created table structure for {table_name}!"
     )
+    click.echo(click.style(msg, fg="green"))
 
 
 @cli.command()
@@ -259,13 +332,25 @@ def makemigration():
 
 
 @cli.command()
-def migrate():
-    """Apply migrations to the database."""
+@click.option(
+    "--database",
+    "-d",
+    default=None,
+    help="Specify database alias to migrate. If omitted, migrates all configured databases.",
+)
+def migrate(database):
+    """Apply migrations to database(s)."""
     _ensure_initialized()
     django_setup.setup()
+    from django.conf import settings
     try:
-        call_command("migrate")
-        click.echo(click.style("Database migrated successfully!", fg="green"))
+        if database:
+            call_command("migrate", database=database)
+            click.echo(click.style(f"Database '{database}' migrated successfully!", fg="green"))
+        else:
+            for db_name in settings.DATABASES:
+                call_command("migrate", database=db_name)
+            click.echo(click.style("Database migrated successfully!", fg="green"))
     except SystemExit as e:
         raise click.Abort() from e
 

@@ -22,6 +22,7 @@ from urllib3.util.retry import Retry
 
 from .audit import log_audit_event
 from .masking import mask_value
+from .models import APILog, APIToken, AuditLog, TABLE_REGISTRY
 from .views import (
     APITokenViewSet,
     AuditLogViewSet,
@@ -73,6 +74,12 @@ try:
         if model_name in ("APIToken", "APILog", "AuditLog"):
             continue
 
+        table_entry = TABLE_REGISTRY.get(model_name, {})
+        module_prefix = table_entry.get("module_prefix", f"tables.{model_name}")
+        db_name = table_entry.get(
+            "database", getattr(model, "_dataman_db", "default")
+        )
+
         # Read operations from config
         ops = ["C", "R", "U", "D"]
         require_auth = False
@@ -86,7 +93,7 @@ try:
         masked_fields = {}
         unmask_scopes = [f"{model_name.lower()}:unmask"]
         try:
-            config_module = importlib.import_module(f"tables.{model_name}.config")
+            config_module = importlib.import_module(f"{module_prefix}.config")
             if hasattr(config_module, "ALLOWED_OPERATIONS"):
                 ops = config_module.ALLOWED_OPERATIONS
             if hasattr(config_module, "REQUIRE_AUTH"):
@@ -128,16 +135,16 @@ try:
 
         try:
             validation_module = importlib.import_module(
-                f"tables.{model_name}.validation"
+                f"{module_prefix}.validation"
             )
         except ImportError as e:
-            if f"tables.{model_name}.validation" not in str(e):
+            if f"{module_prefix}.validation" not in str(e) and f"tables.{model_name}.validation" not in str(e):
                 raise
 
         try:
-            service_module = importlib.import_module(f"tables.{model_name}.service")
+            service_module = importlib.import_module(f"{module_prefix}.service")
         except ImportError as e:
-            if f"tables.{model_name}.service" not in str(e):
+            if f"{module_prefix}.service" not in str(e) and f"tables.{model_name}.service" not in str(e):
                 raise
 
         # Generate Serializer with validation hook
@@ -242,7 +249,7 @@ try:
             permission_classes = [AllowAny]
 
         # Viewset service hooks
-        def make_hooks(s_mod, w_url, t_name):
+        def make_hooks(s_mod, w_url, t_name, d_name):
             def _create(self, serializer):
                 if s_mod and hasattr(s_mod, "before_create"):
                     s_mod.before_create(serializer.validated_data)
@@ -257,6 +264,7 @@ try:
                     request=getattr(self, "request", None),
                     details={
                         "table": t_name,
+                        "database": d_name,
                         "id": getattr(instance, "id", None),
                         "data": serializer.data,
                     },
@@ -287,6 +295,7 @@ try:
                     request=getattr(self, "request", None),
                     details={
                         "table": t_name,
+                        "database": d_name,
                         "id": getattr(instance, "id", None),
                         "data": serializer.data,
                     },
@@ -312,7 +321,7 @@ try:
                 log_audit_event(
                     event_type="RECORD_DELETED",
                     request=getattr(self, "request", None),
-                    details={"table": t_name, "id": instance_id},
+                    details={"table": t_name, "database": d_name, "id": instance_id},
                     severity="WARNING",
                     status_code=204,
                 )
@@ -323,7 +332,7 @@ try:
             return _create, _update, _destroy
 
         custom_perform_create, custom_perform_update, custom_perform_destroy = (
-            make_hooks(service_module, webhook_url, model_name)
+            make_hooks(service_module, webhook_url, model_name, db_name)
         )
 
         viewset_attrs = {
@@ -406,7 +415,13 @@ try:
             viewset_attrs,
         )
 
-        router.register(f"api/{model_name.lower()}", viewset_class)
+        router.register(f"api/{model_name.lower()}", viewset_class, basename=model_name.lower())
+        if db_name and db_name != "default":
+            router.register(
+                f"api/{db_name.lower()}/{model_name.lower()}",
+                viewset_class,
+                basename=f"{db_name.lower()}-{model_name.lower()}",
+            )
 except LookupError:
     pass
 
