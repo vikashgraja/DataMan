@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import hashlib
 import io
@@ -7,7 +8,6 @@ import time
 from datetime import timedelta
 
 from django.contrib.auth.decorators import user_passes_test
-from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.models import Avg, Count, Q
 from django.http import HttpResponse
@@ -479,14 +479,15 @@ class AuditLogViewSet(viewsets.ViewSet):
 @permission_classes([IsAdminOrLocal])
 def catalog_summary(request):
     """Returns all registered tables grouped by database, along with fields and row counts."""
-    from dataman.core.models import TABLE_REGISTRY
     from django.conf import settings
+
+    from dataman.core.models import TABLE_REGISTRY
 
     databases = list(getattr(settings, "DATABASES", {"default": {}}).keys())
     db_tables = {db: [] for db in databases}
 
     seen_models = set()
-    for name, entry in TABLE_REGISTRY.items():
+    for _name, entry in TABLE_REGISTRY.items():
         model = entry.get("model")
         if not model or model in seen_models:
             continue
@@ -506,10 +507,8 @@ def catalog_summary(request):
         ]
 
         count = 0
-        try:
+        with contextlib.suppress(Exception):
             count = model.objects.using(db).count()
-        except Exception:
-            pass
 
         db_tables[db].append(
             {
@@ -562,9 +561,7 @@ def table_records_view(request, table_name):
             }
         )
     except Exception as e:
-        return Response(
-            {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @user_passes_test(lambda u: u.is_superuser, login_url="/admin/login/")
@@ -591,7 +588,7 @@ def health_ready(request):
     is_healthy = True
 
     # 1. Database connectivity check
-    from django.db import connection, connections
+    from django.db import connections
 
     db_checks = {}
     default_db_info = None
@@ -655,7 +652,9 @@ def health_ready(request):
 
     checks["all_migrations"] = all_migrations
     checks["migrations"] = {
-        "status": "applied" if total_unapplied == 0 and is_healthy else ("pending" if total_unapplied > 0 else "error"),
+        "status": "applied"
+        if total_unapplied == 0 and is_healthy
+        else ("pending" if total_unapplied > 0 else "error"),
         "unapplied_count": total_unapplied,
     }
 

@@ -1,8 +1,5 @@
-import json
-import os
 import subprocess
 import sys
-from pathlib import Path
 
 from dataman.core.router import DataManDatabaseRouter
 
@@ -17,6 +14,7 @@ def test_database_router_logic():
 
     class FakeCustomDbModel:
         _dataman_db = "analytics"
+
         class _meta:
             app_label = "dataman"
 
@@ -71,7 +69,9 @@ def test_multi_database_cli_scaffold_and_crud(tmp_path):
 
     # Allow testserver in .env for DRF test client
     env_file = tmp_path / ".env"
-    env_file.write_text(env_file.read_text().replace("ALLOWED_HOSTS=", "ALLOWED_HOSTS=testserver,"))
+    env_file.write_text(
+        env_file.read_text().replace("ALLOWED_HOSTS=", "ALLOWED_HOSTS=testserver,")
+    )
 
     # 2. Create database 'analytics'
     res_db = subprocess.run(
@@ -91,15 +91,28 @@ def test_multi_database_cli_scaffold_and_crud(tmp_path):
         capture_output=True,
         text=True,
     )
-    assert res_t1.returncode == 0, f"Create Customer failed: {res_t1.stderr} {res_t1.stdout}"
+    assert res_t1.returncode == 0, (
+        f"Create Customer failed: {res_t1.stderr} {res_t1.stdout}"
+    )
 
     res_t2 = subprocess.run(
-        [sys.executable, "-m", "dataman.cli", "create", "table", "Event", "--database", "analytics"],
+        [
+            sys.executable,
+            "-m",
+            "dataman.cli",
+            "create",
+            "table",
+            "Event",
+            "--database",
+            "analytics",
+        ],
         cwd=cwd_str,
         capture_output=True,
         text=True,
     )
-    assert res_t2.returncode == 0, f"Create Event failed: {res_t2.stderr} {res_t2.stdout}"
+    assert res_t2.returncode == 0, (
+        f"Create Event failed: {res_t2.stderr} {res_t2.stdout}"
+    )
     assert (tmp_path / "analytics" / "Event").is_dir()
 
     # Define model fields for Customer
@@ -113,7 +126,9 @@ def test_multi_database_cli_scaffold_and_crud(tmp_path):
         "        app_label = 'dataman'\n"
         "        db_table = 'customer'\n"
     )
-    (tmp_path / "tables" / "Customer" / "config.py").write_text("REQUIRE_AUTH = False\n")
+    (tmp_path / "tables" / "Customer" / "config.py").write_text(
+        "REQUIRE_AUTH = False\n"
+    )
 
     # Define model fields for Event
     event_model_file = tmp_path / "analytics" / "Event" / "models.py"

@@ -1,6 +1,7 @@
 import concurrent.futures
 import contextlib
 import importlib
+import logging
 
 import requests
 from django.apps import apps
@@ -67,9 +68,6 @@ def dispatch_webhook(url, action, table_name, data):
 try:
     dataman_app = apps.get_app_config("dataman")
     for model in dataman_app.get_models():
-        with contextlib.suppress(Exception):
-            admin.site.register(model)
-
         model_name = model.__name__
 
         if model_name in ("APIToken", "APILog", "AuditLog"):
@@ -77,9 +75,7 @@ try:
 
         table_entry = TABLE_REGISTRY.get(model_name, {})
         module_prefix = table_entry.get("module_prefix", f"tables.{model_name}")
-        db_name = table_entry.get(
-            "database", getattr(model, "_dataman_db", "default")
-        )
+        db_name = table_entry.get("database", getattr(model, "_dataman_db", "default"))
 
         # Read operations from config
         ops = ["C", "R", "U", "D"]
@@ -93,7 +89,7 @@ try:
         depth = None
         masked_fields = {}
         unmask_scopes = [f"{model_name.lower()}:unmask"]
-        try:
+        with contextlib.suppress(ModuleNotFoundError):
             config_module = importlib.import_module(f"{module_prefix}.config")
             if hasattr(config_module, "ALLOWED_OPERATIONS"):
                 ops = config_module.ALLOWED_OPERATIONS
@@ -117,8 +113,6 @@ try:
                 masked_fields = config_module.MASKED_FIELDS
             if hasattr(config_module, "UNMASK_SCOPES"):
                 unmask_scopes = config_module.UNMASK_SCOPES
-        except ModuleNotFoundError:
-            pass  # nosec B110
 
         http_methods = ["options"]
         if "C" in ops:
@@ -135,17 +129,19 @@ try:
         service_module = None
 
         try:
-            validation_module = importlib.import_module(
-                f"{module_prefix}.validation"
-            )
+            validation_module = importlib.import_module(f"{module_prefix}.validation")
         except ImportError as e:
-            if f"{module_prefix}.validation" not in str(e) and f"tables.{model_name}.validation" not in str(e):
+            if f"{module_prefix}.validation" not in str(
+                e
+            ) and f"tables.{model_name}.validation" not in str(e):
                 raise
 
         try:
             service_module = importlib.import_module(f"{module_prefix}.service")
         except ImportError as e:
-            if f"{module_prefix}.service" not in str(e) and f"tables.{model_name}.service" not in str(e):
+            if f"{module_prefix}.service" not in str(
+                e
+            ) and f"tables.{model_name}.service" not in str(e):
                 raise
 
         # Generate Serializer with validation hook
@@ -416,7 +412,9 @@ try:
             viewset_attrs,
         )
 
-        router.register(f"api/{model_name.lower()}", viewset_class, basename=model_name.lower())
+        router.register(
+            f"api/{model_name.lower()}", viewset_class, basename=model_name.lower()
+        )
         if db_name and db_name != "default":
             router.register(
                 f"api/{db_name.lower()}/{model_name.lower()}",
@@ -433,7 +431,9 @@ internal_router.register(r"audit", AuditLogViewSet, basename="audit")
 urlpatterns = [
     path(
         "admin/login/",
-        auth_views.LoginView.as_view(template_name="admin/login.html", next_page="/admin/"),
+        auth_views.LoginView.as_view(
+            template_name="admin/login.html", next_page="/admin/"
+        ),
         name="admin-login",
     ),
     path(

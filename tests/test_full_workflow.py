@@ -1,11 +1,6 @@
-import json
-import os
 import sqlite3
 import subprocess
 import sys
-from pathlib import Path
-
-import pytest
 
 
 def test_full_realworld_multidb_workflow(tmp_path):
@@ -58,7 +53,16 @@ def test_full_realworld_multidb_workflow(tmp_path):
     # - Event in 'analytics'
     # - Product in 'inventory'
     res_tbl1 = subprocess.run(
-        [sys.executable, "-m", "dataman.cli", "create", "table", "Customer", "-o", "crud"],
+        [
+            sys.executable,
+            "-m",
+            "dataman.cli",
+            "create",
+            "table",
+            "Customer",
+            "-o",
+            "crud",
+        ],
         cwd=str(proj_dir),
         capture_output=True,
         text=True,
@@ -115,7 +119,9 @@ def test_full_realworld_multidb_workflow(tmp_path):
         "        app_label = 'dataman'\n"
         "        db_table = 'customer'\n"
     )
-    (proj_dir / "tables" / "Customer" / "models.py").write_text(customer_models, encoding="utf-8")
+    (proj_dir / "tables" / "Customer" / "models.py").write_text(
+        customer_models, encoding="utf-8"
+    )
 
     # Add validation to Customer: email must not be banned domain
     customer_validation = (
@@ -128,14 +134,18 @@ def test_full_realworld_multidb_workflow(tmp_path):
         "        data['name'] = data['name'].strip().title()\n"
         "    return data\n"
     )
-    (proj_dir / "tables" / "Customer" / "validation.py").write_text(customer_validation, encoding="utf-8")
+    (proj_dir / "tables" / "Customer" / "validation.py").write_text(
+        customer_validation, encoding="utf-8"
+    )
 
     # Add lifecycle hook to Customer
     customer_service = (
         "def before_create(data):\n"
         "    data['balance'] = float(data.get('balance', 0)) + 10.00  # $10 welcome bonus\n"
     )
-    (proj_dir / "tables" / "Customer" / "service.py").write_text(customer_service, encoding="utf-8")
+    (proj_dir / "tables" / "Customer" / "service.py").write_text(
+        customer_service, encoding="utf-8"
+    )
 
     # Event model in analytics
     event_models = (
@@ -148,7 +158,9 @@ def test_full_realworld_multidb_workflow(tmp_path):
         "        app_label = 'dataman'\n"
         "        db_table = 'event'\n"
     )
-    (proj_dir / "analytics" / "Event" / "models.py").write_text(event_models, encoding="utf-8")
+    (proj_dir / "analytics" / "Event" / "models.py").write_text(
+        event_models, encoding="utf-8"
+    )
 
     # Product model in inventory
     product_models = (
@@ -162,7 +174,9 @@ def test_full_realworld_multidb_workflow(tmp_path):
         "        app_label = 'dataman'\n"
         "        db_table = 'product'\n"
     )
-    (proj_dir / "inventory" / "Product" / "models.py").write_text(product_models, encoding="utf-8")
+    (proj_dir / "inventory" / "Product" / "models.py").write_text(
+        product_models, encoding="utf-8"
+    )
 
     # Step 5: Run makemigration and migrate
     res_make = subprocess.run(
@@ -191,15 +205,30 @@ def test_full_realworld_multidb_workflow(tmp_path):
     assert db_inventory_path.exists(), "Inventory inventory.sqlite3 missing"
 
     conn_def = sqlite3.connect(str(db_default_path))
-    tables_def = [r[0] for r in conn_def.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()]
+    tables_def = [
+        r[0]
+        for r in conn_def.execute(
+            "SELECT name FROM sqlite_master WHERE type='table';"
+        ).fetchall()
+    ]
     conn_def.close()
 
     conn_ana = sqlite3.connect(str(db_analytics_path))
-    tables_ana = [r[0] for r in conn_ana.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()]
+    tables_ana = [
+        r[0]
+        for r in conn_ana.execute(
+            "SELECT name FROM sqlite_master WHERE type='table';"
+        ).fetchall()
+    ]
     conn_ana.close()
 
     conn_inv = sqlite3.connect(str(db_inventory_path))
-    tables_inv = [r[0] for r in conn_inv.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()]
+    tables_inv = [
+        r[0]
+        for r in conn_inv.execute(
+            "SELECT name FROM sqlite_master WHERE type='table';"
+        ).fetchall()
+    ]
     conn_inv.close()
 
     assert "customer" in tables_def, "customer table not in default db"
@@ -260,7 +289,9 @@ def test_full_realworld_multidb_workflow(tmp_path):
         if "Key:" in line:
             db_token_key = line.split("Key:")[-1].strip()
             break
-    assert db_token_key is not None, f"DB Token key not found in output: {res_db_tok.stdout}"
+    assert db_token_key is not None, (
+        f"DB Token key not found in output: {res_db_tok.stdout}"
+    )
 
     # Step 8: Execute programmatic API tests via subprocess runner
     runner_code = f"""
@@ -349,5 +380,7 @@ print("ALL_REALWORLD_TESTS_PASSED")
         capture_output=True,
         text=True,
     )
-    assert res_run.returncode == 0, f"E2E API execution failed:\nStdout: {res_run.stdout}\nStderr: {res_run.stderr}"
+    assert res_run.returncode == 0, (
+        f"E2E API execution failed:\nStdout: {res_run.stdout}\nStderr: {res_run.stderr}"
+    )
     assert "ALL_REALWORLD_TESTS_PASSED" in res_run.stdout

@@ -15,7 +15,6 @@ classifiers = [
     "Framework :: Django",
     "Framework :: Django :: 5.0",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -54,7 +53,7 @@ branch = true
 concurrency = ["multiprocessing"]
 sigterm = true
 [build-system]
-requires = ["uv_build>=0.10.6,<0.11.0"]
+requires = ["uv_build>=0.10.6,<0.13.0"]
 build-backend = "uv_build"
 
 [dependency-groups]

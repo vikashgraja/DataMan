@@ -1,5 +1,6 @@
 import abc
 import base64
+import contextlib
 import os
 from typing import Any
 
@@ -69,13 +70,11 @@ class AESGCMCryptoProvider(BaseCryptoProvider):
                 secret_key = os.getenv(
                     "DATAMAN_SECRET_KEY", "default-insecure-key-change-me"
                 )
-                try:
+                with contextlib.suppress(Exception):
                     from django.conf import settings
 
                     if settings.configured and getattr(settings, "SECRET_KEY", None):
                         secret_key = settings.SECRET_KEY
-                except Exception:
-                    pass
                 secret_source = secret_key.encode("utf-8")
 
         # Derive a cryptographically strong 256-bit key using HKDF-SHA256
@@ -153,7 +152,7 @@ def get_crypto_provider() -> BaseCryptoProvider:
     if _default_provider is not None:
         return _default_provider
 
-    try:
+    with contextlib.suppress(Exception):
         import config
 
         if hasattr(config, "CRYPTO_PROVIDER") and config.CRYPTO_PROVIDER:
@@ -163,8 +162,6 @@ def get_crypto_provider() -> BaseCryptoProvider:
             elif callable(config.CRYPTO_PROVIDER):
                 _default_provider = config.CRYPTO_PROVIDER()
                 return _default_provider
-    except Exception:
-        pass
 
     _default_provider = AESGCMCryptoProvider()
     return _default_provider

@@ -128,26 +128,52 @@ print("ALL API EXPORT TESTS PASSED!")
 
         # Test CLI export commands
         # 1. Audit log export CSV
-        res_audit_csv = runner.invoke(cli, ["logs", "export-audit", "--format", "csv", "--output", "audit_out.csv"])
+        res_audit_csv = runner.invoke(
+            cli,
+            ["logs", "export-audit", "--format", "csv", "--output", "audit_out.csv"],
+        )
         assert res_audit_csv.exit_code == 0
         assert Path("audit_out.csv").exists()
         assert "timestamp,severity,event_type" in Path("audit_out.csv").read_text()
 
         # 2. Audit log export JSON
-        res_audit_json = runner.invoke(cli, ["logs", "export-audit", "--format", "json", "--output", "audit_out.json"])
+        res_audit_json = runner.invoke(
+            cli,
+            ["logs", "export-audit", "--format", "json", "--output", "audit_out.json"],
+        )
         assert res_audit_json.exit_code == 0
         assert Path("audit_out.json").exists()
         parsed_json = json.loads(Path("audit_out.json").read_text())
         assert len(parsed_json) >= 1
 
         # 3. Telemetry export CSV
-        res_telemetry_csv = runner.invoke(cli, ["logs", "export-telemetry", "--format", "csv", "--output", "telem_out.csv"])
+        res_telemetry_csv = runner.invoke(
+            cli,
+            [
+                "logs",
+                "export-telemetry",
+                "--format",
+                "csv",
+                "--output",
+                "telem_out.csv",
+            ],
+        )
         assert res_telemetry_csv.exit_code == 0
         assert Path("telem_out.csv").exists()
         assert "id,timestamp,method,path" in Path("telem_out.csv").read_text()
 
         # 4. Telemetry export JSON
-        res_telemetry_json = runner.invoke(cli, ["logs", "export-telemetry", "--format", "json", "--output", "telem_out.json"])
+        res_telemetry_json = runner.invoke(
+            cli,
+            [
+                "logs",
+                "export-telemetry",
+                "--format",
+                "json",
+                "--output",
+                "telem_out.json",
+            ],
+        )
         assert res_telemetry_json.exit_code == 0
         assert Path("telem_out.json").exists()
         parsed_telem = json.loads(Path("telem_out.json").read_text())

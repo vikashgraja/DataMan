@@ -16,7 +16,7 @@ from dataman.core.crypto import (
 def test_aes_gcm_crypto_provider_basic():
     provider = AESGCMCryptoProvider()
     plaintext = "super-secret-identity-12345"
-    
+
     ciphertext = provider.encrypt(plaintext)
     assert ciphertext.startswith("v1:")
     assert ciphertext != plaintext
@@ -28,7 +28,7 @@ def test_aes_gcm_crypto_provider_basic():
 def test_aes_gcm_crypto_provider_unicode_and_symbols():
     provider = AESGCMCryptoProvider()
     secret = "🔐 TopSecret 1234! @#$%^&*()_+ 韩国加密 🇰🇷 DataMan"
-    
+
     cipher = provider.encrypt(secret)
     decrypted = provider.decrypt(cipher)
     assert decrypted == secret
@@ -41,7 +41,7 @@ def test_aes_gcm_crypto_provider_context_associated_data():
     ctx2 = {"table": "Customer", "column": "credit_card"}
 
     cipher = provider.encrypt(plaintext, context=ctx1)
-    
+
     # Decrypt with correct context succeeds
     assert provider.decrypt(cipher, context=ctx1) == plaintext
 
@@ -73,7 +73,9 @@ def test_aes_gcm_crypto_provider_unencrypted_passthrough():
     provider = AESGCMCryptoProvider()
     assert provider.encrypt(None) is None
     assert provider.decrypt(None) is None
-    assert provider.decrypt("regular_unencrypted_string") == "regular_unencrypted_string"
+    assert (
+        provider.decrypt("regular_unencrypted_string") == "regular_unencrypted_string"
+    )
 
 
 def test_get_and_reset_crypto_provider():

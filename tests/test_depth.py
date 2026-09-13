@@ -28,13 +28,17 @@ def test_depth_nested_relationships(tmp_path):
         # 2. Configure Auth and DEPTH
         author_config = Path("tables/Author/config.py")
         author_config.write_text(
-            author_config.read_text().replace("REQUIRE_AUTH = True", "REQUIRE_AUTH = False")
+            author_config.read_text().replace(
+                "REQUIRE_AUTH = True", "REQUIRE_AUTH = False"
+            )
         )
 
         book_config = Path("tables/Book/config.py")
-        book_config_text = book_config.read_text().replace(
-            "REQUIRE_AUTH = True", "REQUIRE_AUTH = False"
-        ).replace("DEPTH = 0", "DEPTH = 1")
+        book_config_text = (
+            book_config.read_text()
+            .replace("REQUIRE_AUTH = True", "REQUIRE_AUTH = False")
+            .replace("DEPTH = 0", "DEPTH = 1")
+        )
         book_config.write_text(book_config_text)
 
         # 3. Define models with Foreign Key

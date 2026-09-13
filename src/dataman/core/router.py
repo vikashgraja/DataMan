@@ -1,3 +1,4 @@
+import contextlib
 import logging
 from typing import Any
 
@@ -27,30 +28,36 @@ class DataManDatabaseRouter:
             return str(model._meta.dataman_db)
 
         # Lookup in TABLE_REGISTRY
-        try:
+        with contextlib.suppress(Exception):
             from dataman.core.models import TABLE_REGISTRY
 
             model_name = getattr(model, "__name__", "") or (
-                getattr(model._meta, "object_name", "") if hasattr(model, "_meta") else ""
+                getattr(model._meta, "object_name", "")
+                if hasattr(model, "_meta")
+                else ""
             )
             if model_name:
                 for reg_name, entry in TABLE_REGISTRY.items():
                     if reg_name.lower() == model_name.lower():
                         return entry.get("database", "default")
-        except Exception:
-            pass
 
         return "default"
 
     def db_for_read(self, model: Any, **hints: Any) -> str:
         """Determines which database to use for read operations."""
-        if hasattr(model, "_meta") and model._meta.app_label in self.DJANGO_INTERNAL_APPS:
+        if (
+            hasattr(model, "_meta")
+            and model._meta.app_label in self.DJANGO_INTERNAL_APPS
+        ):
             return "default"
         return self._get_target_db(model)
 
     def db_for_write(self, model: Any, **hints: Any) -> str:
         """Determines which database to use for write operations."""
-        if hasattr(model, "_meta") and model._meta.app_label in self.DJANGO_INTERNAL_APPS:
+        if (
+            hasattr(model, "_meta")
+            and model._meta.app_label in self.DJANGO_INTERNAL_APPS
+        ):
             return "default"
         return self._get_target_db(model)
 
@@ -87,7 +94,7 @@ class DataManDatabaseRouter:
             target_name = target_name.lower()
 
         if target_name:
-            try:
+            with contextlib.suppress(Exception):
                 from dataman.core.models import TABLE_REGISTRY
 
                 for reg_name, entry in TABLE_REGISTRY.items():
@@ -97,8 +104,6 @@ class DataManDatabaseRouter:
                     ):
                         target_db = entry.get("database", "default")
                         return db == target_db
-            except Exception:
-                pass
 
         if model:
             target_db = self._get_target_db(model)

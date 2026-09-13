@@ -135,13 +135,20 @@ def create_database(name):
     _ensure_initialized()
 
     db_name = inflection.underscore(name)
-    if "/" in db_name or "\\" in db_name or "." in db_name or not db_name.isidentifier():
+    if (
+        "/" in db_name
+        or "\\" in db_name
+        or "." in db_name
+        or not db_name.isidentifier()
+    ):
         click.echo(click.style(f"Invalid database name: '{db_name}'.", fg="red"))
         raise click.Abort()
 
     db_dir = Path.cwd() / db_name
     if db_dir.exists():
-        click.echo(click.style(f"Database directory '{db_name}' already exists.", fg="yellow"))
+        click.echo(
+            click.style(f"Database directory '{db_name}' already exists.", fg="yellow")
+        )
         raise click.Abort()
 
     db_dir.mkdir(parents=True)
@@ -165,9 +172,9 @@ def create_database(name):
                 f'\nDATABASES["{db_name}"] = dj_database_url.config(\n'
                 f'    env="{db_name.upper()}_DATABASE_URL",\n'
                 f'    default=f"sqlite:///{{BASE_DIR}}/{db_name}.sqlite3",\n'
-                f'    conn_max_age=600,\n'
-                f'    conn_health_checks=True,\n'
-                f')\n'
+                f"    conn_max_age=600,\n"
+                f"    conn_health_checks=True,\n"
+                f")\n"
             )
             with open(database_file, "a", encoding="utf-8") as f:
                 f.write(entry)
@@ -343,10 +350,13 @@ def migrate(database):
     _ensure_initialized()
     django_setup.setup()
     from django.conf import settings
+
     try:
         if database:
             call_command("migrate", database=database)
-            click.echo(click.style(f"Database '{database}' migrated successfully!", fg="green"))
+            click.echo(
+                click.style(f"Database '{database}' migrated successfully!", fg="green")
+            )
         else:
             for db_name in settings.DATABASES:
                 call_command("migrate", database=db_name)

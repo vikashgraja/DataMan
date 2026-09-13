@@ -155,7 +155,7 @@ record_id = create_resp.json()["id"]
 with connection.cursor() as cursor:
     cursor.execute("SELECT ssn, credit_card, email FROM securecustomer WHERE id = %s", [record_id])
     raw_ssn, raw_card, raw_email = cursor.fetchone()
-    
+
     assert raw_ssn.startswith("v1:")
     assert "123-45-6789" not in raw_ssn
 

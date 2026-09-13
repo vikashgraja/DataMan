@@ -77,14 +77,16 @@ class HasTableScope(permissions.BasePermission):
         reg_entry = TABLE_REGISTRY.get(table_name) or TABLE_REGISTRY.get(clean_table)
         if reg_entry and "database" in reg_entry:
             db_name = reg_entry["database"]
-            possible_scopes.update({
-                f"{db_name}-{clean_table}:{action}",
-                f"{db_name}-{clean_table}:*",
-                f"{db_name}:{clean_table}:{action}",
-                f"{db_name}:{clean_table}:*",
-                f"{db_name}:{action}",
-                f"{db_name}:*",
-            })
+            possible_scopes.update(
+                {
+                    f"{db_name}-{clean_table}:{action}",
+                    f"{db_name}-{clean_table}:*",
+                    f"{db_name}:{clean_table}:{action}",
+                    f"{db_name}:{clean_table}:*",
+                    f"{db_name}:{action}",
+                    f"{db_name}:*",
+                }
+            )
 
         if "*" in token.scopes:
             return True

@@ -1,3 +1,4 @@
+import contextlib
 import importlib
 import secrets
 import sys
@@ -106,7 +107,11 @@ def _discover_and_load_models():
                 for tbl_dir in db_dir.iterdir():
                     if tbl_dir.is_dir() and (tbl_dir / "models.py").exists():
                         discovered_candidates.append(
-                            (db_dir.name, tbl_dir.name, f"databases.{db_dir.name}.{tbl_dir.name}")
+                            (
+                                db_dir.name,
+                                tbl_dir.name,
+                                f"databases.{db_dir.name}.{tbl_dir.name}",
+                            )
                         )
 
     # 2. Check root-level database directories: <db_name>/<table_name>
@@ -147,12 +152,10 @@ def _discover_and_load_models():
                 ):
                     # Check if config overrides database
                     target_db = db_name
-                    try:
+                    with contextlib.suppress(Exception):
                         cfg_mod = importlib.import_module(f"{module_prefix}.config")
                         if hasattr(cfg_mod, "DATABASE") and cfg_mod.DATABASE:
                             target_db = str(cfg_mod.DATABASE)
-                    except Exception:
-                        pass
 
                     attr._dataman_db = target_db
                     entry = {
