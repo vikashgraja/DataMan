@@ -99,6 +99,7 @@ def setup():
     )
 
     installed_apps = [
+        "dataman.core",
         "django.contrib.admin",
         "django.contrib.auth",
         "django.contrib.contenttypes",
@@ -107,7 +108,6 @@ def setup():
         "django.contrib.staticfiles",
         "rest_framework",
         "drf_spectacular",
-        "dataman.core",
     ] + list(extra_apps)
 
     middleware = [
@@ -147,6 +147,7 @@ def setup():
         DEBUG=debug_val,
         ALLOWED_HOSTS=allowed_hosts,
         LOGIN_URL="/admin/login/",
+        LOGIN_REDIRECT_URL="/admin/",
         INSTALLED_APPS=installed_apps,
         REST_FRAMEWORK=rest_framework_settings,
         DATABASES=databases_config,

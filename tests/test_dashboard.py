@@ -92,11 +92,17 @@ assert tokens[0]["name"] == "TestToken"
 r_delete = client.delete(f"/api/_internal/tokens/{token_id}/")
 assert r_delete.status_code == 204, "Token deletion failed"
 
-# 5. Test Dashboard HTML View
+# 5. Test Dashboard HTML View and Admin View
 r_dash = client.get("/dashboard/")
 assert r_dash.status_code == 200, "Dashboard view failed"
-assert b"DataMan Operations Dashboard" in r_dash.content, (
+assert b"DataMan Console" in r_dash.content, (
     "Dashboard HTML not loaded properly"
+)
+
+r_admin = client.get("/admin/")
+assert r_admin.status_code == 200, "Admin view failed"
+assert b"DataMan Console" in r_admin.content, (
+    "Admin dashboard HTML not loaded properly"
 )
 
 print("SUCCESS")

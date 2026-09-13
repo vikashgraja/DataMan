@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataMan Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-primary: #090d16;
+            --bg-surface: rgba(18, 24, 38, 0.75);
+            --bg-surface-hover: rgba(30, 41, 59, 0.85);
+            --border-surface: rgba(255, 255, 255, 0.08);
+            --border-focus: #3b82f6;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-indigo: #6366f1;
+            --accent-purple: #a855f7;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --glass-blur: blur(16px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        code,
+        pre,
+        .mono {
+            font-family: 'JetBrains Mono', monospace !important;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.12) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 40%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            overflow-x: hidden;
+        }
+
+        /* Ambient Glowing Overlay */
+        .grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0);
+            background-size: 32px 32px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Sidebar Navigation (Prefect Inspired) */
+        nav.sidebar {
+            width: 290px;
+            min-width: 290px;
+            background: var(--bg-surface);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-right: 1px solid var(--border-surface);
+            padding: 1.75rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+        .brand-section {
+            margin-bottom: 2rem;
+        }
+
+        .brand-logo {
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #6366f1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            margin-bottom: 0.5rem;
+        }
+
+        .system-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #34d399;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background-color: var(--success);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--success);
+            animation: pulseDot 2s infinite;
+        }
+
+        @keyframes pulseDot {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.85);
+            }
+        }
+
+        .nav-group-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin: 1.25rem 0.75rem 0.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .nav-link {
+            padding: 0.7rem 0.9rem;
+            border-radius: 0.75rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.88rem;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            cursor: pointer;
+            border: 1px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-link svg {
+            color: var(--text-muted);
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-primary);
+            transform: translateX(3px);
+        }
+
+        .nav-link:hover svg {
+            color: var(--accent-cyan);
+        }
+
+        .nav-link.active {
+            background: rgba(59, 130, 246, 0.12);
+            color: #60a5fa;
+            border-color: rgba(59, 130, 246, 0.3);
+            font-weight: 600;
+        }
+
+        .nav-link.active svg {
+            color: #60a5fa;
+        }
+
+        .sidebar-footer {
+            border-top: 1px solid var(--border-surface);
+            padding-top: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: #ffffff;
+        }
+
+        .user-meta .name {
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .user-meta .role {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .logout-btn {
+            background: none;
+            border: none;
+            color: #f87171;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        /* Main Content Area */
+        main.content {
+            flex: 1;
+            padding: 2.5rem 3rem;
+            overflow-y: auto;
+            height: 100vh;
+            position: relative;
+            z-index: 10;
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .page-title h1 {
+            font-size: 1.75rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        .page-title p {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        /* Cards & Metric Tiles */
+        .card {
+            background: var(--bg-surface);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-surface);
+            border-radius: 18px;
+            padding: 1.75rem;
+            margin-bottom: 1.75rem;
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 1.75rem;
+        }
+
+        .metric-card {
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: #ffffff;
+        }
+
+        .metric-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.6rem 1.1rem;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-surface);
+            color: var(--text-primary);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.3);
+            color: #ffffff;
+        }
+
+        /* Tables */
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        table.data-table th {
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.6);
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 1px solid var(--border-surface);
+        }
+
+        table.data-table td {
+            padding: 14px 16px;
+            color: var(--text-primary);
+            font-size: 0.86rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: middle;
+        }
+
+        table.data-table tbody tr {
+            transition: background 0.15s ease;
+        }
+
+        table.data-table tbody tr:hover {
+            background: var(--bg-surface-hover);
+        }
+
+        /* Pills & Badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fcd34d;
+            border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+
+        .badge-info {
+            background: rgba(59, 130, 246, 0.15);
+            color: #93c5fd;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+        }
+
+        .badge-purple {
+            background: rgba(168, 85, 247, 0.15);
+            color: #d8b4fe;
+            border: 1px solid rgba(168, 85, 247, 0.25);
+        }
+
+        /* Filter bar & Inputs */
+        .filter-bar {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .form-input-sm {
+            background: rgba(10, 15, 26, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            color: var(--text-primary);
+            padding: 8px 12px;
+            font-size: 0.84rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .form-input-sm:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-card {
+            background: #101726;
+            border: 1px solid var(--border-surface);
+            border-radius: 20px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 560px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            transform: scale(0.95);
+            transition: transform 0.25s ease;
+        }
+
+        .modal-overlay.active .modal-card {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-header h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        .modal-form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .modal-form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .modal-form-group input,
+        .modal-form-group select,
+        .modal-form-group textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: rgba(10, 15, 26, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .modal-form-group input:focus,
+        .modal-form-group select:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+        }
+
+        .token-reveal-banner {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px dashed rgba(16, 185, 129, 0.4);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        .token-reveal-banner code {
+            color: #34d399;
+            font-size: 1rem;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="grid-overlay"></div>
+
+    <!-- Sidebar (Prefect Style) -->
+    <nav class="sidebar">
+        <div>
+            <div class="brand-section">
+                <a href="/admin/" class="brand-logo">
+                    <span>⚡ DataMan</span>
+                </a>
+                <div class="system-status-pill">
+                    <span class="status-dot"></span>
+                    <span>Console</span>
+                </div>
+            </div>
+
+            <div class="nav-group-label">Core Modules</div>
+            <div class="nav-links">
+                <a class="nav-link active" onclick="switchTab('analytics')" id="nav-analytics">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 3v18h18" />
+                        <path d="m19 9-5 5-4-4-3 3" />
+                    </svg>
+                    <span>Analytics & Telemetry</span>
+                </a>
+                <a class="nav-link" onclick="switchTab('tables')" id="nav-tables">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                    <span>Database & Tables</span>
+                </a>
+                <a class="nav-link" onclick="switchTab('rbac')" id="nav-rbac">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    <span>API Tokens & RBAC</span>
+                </a>
+                <a class="nav-link" onclick="switchTab('audit')" id="nav-audit">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span>Security & Audit Logs</span>
+                </a>
+                <a class="nav-link" onclick="switchTab('health')" id="nav-health">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                    </svg>
+                    <span>Health & Diagnostics</span>
+                </a>
+            </div>
+
+            <div class="nav-group-label">Developer Tools</div>
+            <div class="nav-links">
+                <a class="nav-link" href="/api/docs/" target="_blank" style="color: #c084fc;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                    </svg>
+                    <span>Swagger API Docs ↗</span>
+                </a>
+                <a class="nav-link" href="/api/redoc/" target="_blank" style="color: #67e8f9;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    <span>ReDoc Console ↗</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="user-profile">
+                <div class="user-avatar">A</div>
+                <div class="user-meta">
+                    <div class="name">Administrator</div>
+                    <div class="role">Superuser</div>
+                </div>
+            </div>
+            <form method="post" action="/admin/logout/">
+                {% csrf_token %}
+                <button type="submit" class="logout-btn" title="Sign Out">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </nav>
+
+    <!-- Main Content Tabs -->
+    <main class="content">
+
+        <!-- TAB 1: ANALYTICS & TELEMETRY -->
+        <div id="tab-analytics">
+            <div class="header-row">
+                <div class="page-title">
+                    <h1>API Telemetry & Performance</h1>
+                    <p>Live request throughput, latency monitoring, and endpoint traffic breakdown</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-outline" onclick="exportTelemetry('csv')">Export CSV</button>
+                    <button class="btn btn-outline" onclick="exportTelemetry('json')">Export JSON</button>
+                    <button class="btn btn-primary" onclick="loadAnalytics()">Refresh</button>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="card metric-card">
+                    <div class="metric-label">Total Requests</div>
+                    <div class="metric-value" id="metric-total">0</div>
+                    <div class="metric-subtitle">Across all database endpoints</div>
+                </div>
+                <div class="card metric-card">
+                    <div class="metric-label">Error Rate (4xx, 5xx)</div>
+                    <div class="metric-value" id="metric-errors">0%</div>
+                    <div class="metric-subtitle">Failed or rejected operations</div>
+                </div>
+                <div class="card metric-card">
+                    <div class="metric-label">Average Latency</div>
+                    <div class="metric-value" id="metric-latency">0 ms</div>
+                    <div class="metric-subtitle">Response round-trip time</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 1.25rem; font-size: 1.05rem;">Endpoint Utilization</h3>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Route Path</th>
+                                <th>Total Hits</th>
+                                <th>Average Latency</th>
+                            </tr>
+                        </thead>
+                        <tbody id="endpoint-summary-body">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: var(--text-muted);">No traffic
+                                    recorded yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 1.25rem; font-size: 1.05rem;">Recent Live Traffic</h3>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Status</th>
+                                <th>Latency</th>
+                                <th>Client IP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-logs-body">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted);">No logs available.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: DATABASE & TABLES EXPLORER -->
+        <div id="tab-tables" class="hidden">
+            <div class="header-row">
+                <div class="page-title">
+                    <h1>Database & Tables Explorer</h1>
+                    <p>Catalog of registered multi-database models and interactive record browser</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="loadCatalog()">Refresh Catalog</button>
+                </div>
+            </div>
+
+            <div id="catalog-container">
+                <div class="card" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                    Loading table catalog across all databases...
+                </div>
+            </div>
+
+            <!-- Table Record Browser Modal / Section -->
+            <div id="table-record-viewer" class="card hidden" style="margin-top: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h3 id="viewer-table-title" style="font-size: 1.15rem;">Table Records</h3>
+                        <p id="viewer-table-sub" style="font-size: 0.8rem; color: var(--text-muted);"></p>
+                    </div>
+                    <button class="btn btn-outline"
+                        onclick="document.getElementById('table-record-viewer').classList.add('hidden')">Close
+                        Viewer</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table" id="viewer-table">
+                        <thead id="viewer-table-head"></thead>
+                        <tbody id="viewer-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: API TOKENS & RBAC -->
+        <div id="tab-rbac" class="hidden">
+            <div class="header-row">
+                <div class="page-title">
+                    <h1>API Tokens & Access Control</h1>
+                    <p>Manage service credentials and granular database/table-level scopes</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="openTokenModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        <span>Generate Token</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Key Prefix</th>
+                                <th>Assigned Scopes</th>
+                                <th>Created</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tokens-table-body">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted);">No tokens
+                                    generated.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: SECURITY & AUDIT LOGS -->
+        <div id="tab-audit" class="hidden">
+            <div class="header-row">
+                <div class="page-title">
+                    <h1>Security & Audit Trail</h1>
+                    <p>Real-time security telemetry, authentication attempts, and authorization rejections</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-outline" onclick="exportAudit('csv')">Export CSV</button>
+                    <button class="btn btn-outline" onclick="exportAudit('json')">Export JSON</button>
+                    <button class="btn btn-primary" onclick="loadAuditLogs()">Filter & Refresh</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="filter-bar">
+                    <input type="text" id="audit-search" class="form-input-sm" placeholder="Search actor, IP, event..."
+                        onkeyup="if(event.key==='Enter') loadAuditLogs()">
+                    <select id="audit-event-type" class="form-input-sm" onchange="loadAuditLogs()">
+                        <option value="">All Event Types</option>
+                        <option value="PERMISSION_DENIED">PERMISSION_DENIED</option>
+                        <option value="TOKEN_EXPIRED">TOKEN_EXPIRED</option>
+                        <option value="TOKEN_REVOKED">TOKEN_REVOKED</option>
+                        <option value="AUTH_FAILURE">AUTH_FAILURE</option>
+                    </select>
+                    <select id="audit-severity" class="form-input-sm" onchange="loadAuditLogs()">
+                        <option value="">All Severities</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="CRITICAL">CRITICAL</option>
+                    </select>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Severity</th>
+                                <th>Event Type</th>
+                                <th>Actor</th>
+                                <th>Status</th>
+                                <th>IP Address</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-table-body">
+                            <tr>
+                                <td colspan="7" style="text-align: center; color: var(--text-muted);">No audit events
+                                    recorded.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: HEALTH & DIAGNOSTICS -->
+        <div id="tab-health" class="hidden">
+            <div class="header-row">
+                <div class="page-title">
+                    <h1>System Health & Multi-DB Probes</h1>
+                    <p>Live vitality metrics, database connectivity, and migration synchronization</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="loadHealthStatus()">Run Probe</button>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="card metric-card">
+                    <div class="metric-label">Liveness Probe</div>
+                    <div class="metric-value" id="health-live-val" style="color: #34d399;">ALIVE</div>
+                    <div class="metric-subtitle">HTTP process responding</div>
+                </div>
+                <div class="card metric-card">
+                    <div class="metric-label">Readiness Probe</div>
+                    <div class="metric-value" id="health-ready-val" style="color: #34d399;">READY</div>
+                    <div class="metric-subtitle">All databases connected</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 1.25rem; font-size: 1.05rem;">Multi-Database Connectivity</h3>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Database Alias</th>
+                                <th>Connection Status</th>
+                                <th>Engine</th>
+                                <th>Latency</th>
+                            </tr>
+                        </thead>
+                        <tbody id="health-db-body">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: var(--text-muted);">Loading database
+                                    health...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Generate Token Modal -->
+    <div class="modal-overlay" id="token-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Generate API Token</h2>
+                <button class="modal-close" onclick="closeTokenModal()">&times;</button>
+            </div>
+            <div id="token-form-content">
+                <div class="modal-form-group">
+                    <label>Token Name</label>
+                    <input type="text" id="new-token-name" placeholder="e.g. AnalyticsIngestService">
+                </div>
+                <div class="modal-form-group">
+                    <label>Scopes (comma-separated, e.g. analytics:*, customer:read, customer:write)</label>
+                    <input type="text" id="new-token-scopes" placeholder="analytics:*, customer:read">
+                </div>
+                <div class="modal-form-group">
+                    <label>Expiration</label>
+                    <select id="new-token-expiration">
+                        <option value="never">Never Expires</option>
+                        <option value="30d">30 Days</option>
+                        <option value="90d">90 Days</option>
+                        <option value="1y">1 Year</option>
+                    </select>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.5rem;">
+                    <button class="btn btn-outline" onclick="closeTokenModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="submitCreateToken()">Create Token</button>
+                </div>
+            </div>
+            <div id="token-result-content" class="hidden">
+                <p style="color: #34d399; font-weight: 600; margin-bottom: 0.5rem;">Token created successfully!</p>
+                <p style="font-size: 0.82rem; color: var(--text-muted);">Copy this key now. You will not be able to view
+                    it again.</p>
+                <div class="token-reveal-banner">
+                    <code id="revealed-token-key"></code>
+                </div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button class="btn btn-primary" onclick="closeTokenModal()">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripting for Live Interactive Operations -->
+    <script>
+        function switchTab(tabId) {
+            const tabs = ['analytics', 'tables', 'rbac', 'audit', 'health'];
+            tabs.forEach(t => {
+                const el = document.getElementById('tab-' + t);
+                const nav = document.getElementById('nav-' + t);
+                if (el) el.classList.toggle('hidden', t !== tabId);
+                if (nav) nav.classList.toggle('active', t === tabId);
+            });
+
+            if (tabId === 'analytics') loadAnalytics();
+            if (tabId === 'tables') loadCatalog();
+            if (tabId === 'rbac') loadTokens();
+            if (tabId === 'audit') loadAuditLogs();
+            if (tabId === 'health') loadHealthStatus();
+        }
+
+        // --- Analytics Tab ---
+        async function loadAnalytics() {
+            try {
+                const res = await fetch('/api/_internal/analytics/summary/');
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('metric-total').textContent = data.total_requests || 0;
+                document.getElementById('metric-latency').textContent = (data.avg_latency || 0) + ' ms';
+                const errRate = data.total_requests > 0 ? ((data.total_errors / data.total_requests) * 100).toFixed(1) : 0;
+                document.getElementById('metric-errors').textContent = errRate + '%';
+
+                const summaryBody = document.getElementById('endpoint-summary-body');
+                if (data.endpoints && data.endpoints.length > 0) {
+                    summaryBody.innerHTML = data.endpoints.map(e => `
+                        <tr>
+                            <td><span class="badge badge-info">${e.method}</span></td>
+                            <td class="mono" style="color: #67e8f9;">${e.path}</td>
+                            <td>${e.count}</td>
+                            <td>${Math.round(e.avg_duration || 0)} ms</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    summaryBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No endpoint hits recorded.</td></tr>';
+                }
+
+                const logsRes = await fetch('/api/_internal/analytics/logs/');
+                if (logsRes.ok) {
+                    const logs = await logsRes.json();
+                    const logsBody = document.getElementById('recent-logs-body');
+                    if (logs && logs.length > 0) {
+                        logsBody.innerHTML = logs.map(l => `
+                            <tr>
+                                <td style="font-size: 0.78rem; color: var(--text-muted);">${new Date(l.timestamp).toLocaleTimeString()}</td>
+                                <td><span class="badge ${l.status_code >= 400 ? 'badge-danger' : 'badge-success'}">${l.method}</span></td>
+                                <td class="mono" style="font-size: 0.82rem;">${l.path}</td>
+                                <td><span class="badge ${l.status_code >= 400 ? 'badge-danger' : 'badge-success'}">${l.status_code}</span></td>
+                                <td>${l.duration_ms} ms</td>
+                                <td class="mono" style="color: var(--text-muted); font-size: 0.8rem;">${l.ip_address || '-'}</td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        logsBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No logs available.</td></tr>';
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load analytics:', e);
+            }
+        }
+
+        function exportTelemetry(fmt) {
+            window.location.href = `/api/_internal/analytics/export/?format=${fmt}`;
+        }
+
+        // --- Database & Tables Catalog ---
+        async function loadCatalog() {
+            const container = document.getElementById('catalog-container');
+            try {
+                const res = await fetch('/api/_internal/catalog/');
+                if (!res.ok) throw new Error('Catalog fetch failed');
+                const data = await res.json();
+
+                let html = '';
+                for (const db of data.databases) {
+                    const tables = data.tables_by_db[db] || [];
+                    html += `
+                        <div class="card" style="margin-bottom: 1.5rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="badge badge-purple" style="text-transform: uppercase; font-size: 0.8rem;">Database: ${db}</span>
+                                    <span style="font-size: 0.82rem; color: var(--text-muted);">${tables.length} table(s)</span>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Model</th>
+                                            <th>Database Table</th>
+                                            <th>Fields Count</th>
+                                            <th>Total Records</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${tables.map(t => `
+                                            <tr>
+                                                <td style="font-weight: 700; color: #ffffff;">${t.model_name}</td>
+                                                <td class="mono" style="color: #67e8f9;">${t.db_table}</td>
+                                                <td><span class="badge badge-info">${t.fields.length} Fields</span></td>
+                                                <td><strong>${t.row_count}</strong> rows</td>
+                                                <td>
+                                                    <button class="btn btn-outline" style="padding: 4px 10px; font-size: 0.78rem;" onclick="viewTableData('${t.table_name}')">Inspect Data</button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html || '<div class="card" style="text-align: center; color: var(--text-muted);">No tables discovered.</div>';
+            } catch (e) {
+                container.innerHTML = `<div class="card" style="color: #fca5a5;">Failed to load catalog: ${e.message}</div>`;
+            }
+        }
+
+        async function viewTableData(tableName) {
+            const viewer = document.getElementById('table-record-viewer');
+            const head = document.getElementById('viewer-table-head');
+            const body = document.getElementById('viewer-table-body');
+            document.getElementById('viewer-table-title').textContent = `Inspecting Table: ${tableName}`;
+
+            viewer.classList.remove('hidden');
+            head.innerHTML = '<tr><th>Loading...</th></tr>';
+            body.innerHTML = '';
+
+            try {
+                const res = await fetch(`/api/_internal/table-records/${tableName}/`);
+                const data = await res.json();
+                document.getElementById('viewer-table-sub').textContent = `Database: ${data.database} | Total Records: ${data.total_records}`;
+
+                if (data.records && data.records.length > 0) {
+                    const columns = Object.keys(data.records[0]);
+                    head.innerHTML = '<tr>' + columns.map(c => `<th>${c}</th>`).join('') + '</tr>';
+                    body.innerHTML = data.records.map(r => `
+                        <tr>${columns.map(c => `<td class="mono" style="font-size: 0.8rem;">${r[c] !== null ? r[c] : '<span style="color: var(--text-muted)">null</span>'}</td>`).join('')}</tr>
+                    `).join('');
+                } else {
+                    head.innerHTML = '<tr><th>Status</th></tr>';
+                    body.innerHTML = '<tr><td style="color: var(--text-muted); text-align: center;">No records found in this table.</td></tr>';
+                }
+            } catch (e) {
+                body.innerHTML = `<tr><td style="color: #fca5a5;">Error loading rows: ${e.message}</td></tr>`;
+            }
+        }
+
+        // --- Tokens Tab ---
+        async function loadTokens() {
+            try {
+                const res = await fetch('/api/_internal/tokens/');
+                if (!res.ok) return;
+                const tokens = await res.json();
+                const tbody = document.getElementById('tokens-table-body');
+                if (tokens && tokens.length > 0) {
+                    tbody.innerHTML = tokens.map(t => `
+                        <tr>
+                            <td style="font-weight: 600; color: #ffffff;">${t.name}</td>
+                            <td class="mono" style="color: #60a5fa;">${t.prefix}...</td>
+                            <td>${t.scopes.map(s => `<span class="badge badge-purple" style="margin-right: 4px;">${s}</span>`).join('') || '<span class="badge badge-info">Full Access (*)</span>'}</td>
+                            <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(t.created_at).toLocaleDateString()}</td>
+                            <td><span class="badge ${t.is_active ? 'badge-success' : 'badge-danger'}">${t.is_active ? 'Active' : 'Revoked'}</span></td>
+                            <td>
+                                ${t.is_active ? `<button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.78rem;" onclick="revokeToken(${t.id})">Revoke</button>` : '-'}
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No tokens generated yet.</td></tr>';
+                }
+            } catch (e) {
+                console.error('Failed to load tokens:', e);
+            }
+        }
+
+        function openTokenModal() {
+            document.getElementById('token-form-content').classList.remove('hidden');
+            document.getElementById('token-result-content').classList.add('hidden');
+            document.getElementById('new-token-name').value = '';
+            document.getElementById('new-token-scopes').value = '';
+            document.getElementById('token-modal').classList.add('active');
+        }
+
+        function closeTokenModal() {
+            document.getElementById('token-modal').classList.remove('active');
+            loadTokens();
+        }
+
+        async function submitCreateToken() {
+            const name = document.getElementById('new-token-name').value.trim();
+            const scopesRaw = document.getElementById('new-token-scopes').value.trim();
+            const expiration = document.getElementById('new-token-expiration').value;
+
+            if (!name) {
+                alert('Please provide a token name.');
+                return;
+            }
+
+            const scopes = scopesRaw ? scopesRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+            try {
+                const res = await fetch('/api/_internal/tokens/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, scopes, expires_in: expiration })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    document.getElementById('token-form-content').classList.add('hidden');
+                    document.getElementById('token-result-content').classList.remove('hidden');
+                    document.getElementById('revealed-token-key').textContent = data.key;
+                } else {
+                    alert('Error: ' + JSON.stringify(data));
+                }
+            } catch (e) {
+                alert('Request failed: ' + e.message);
+            }
+        }
+
+        async function revokeToken(id) {
+            if (!confirm('Are you sure you want to revoke this token?')) return;
+            try {
+                await fetch(`/api/_internal/tokens/${id}/`, { method: 'DELETE' });
+                loadTokens();
+            } catch (e) {
+                alert('Failed to revoke: ' + e.message);
+            }
+        }
+
+        // --- Audit Tab ---
+        async function loadAuditLogs() {
+            const search = document.getElementById('audit-search').value.trim();
+            const eventType = document.getElementById('audit-event-type').value;
+            const severity = document.getElementById('audit-severity').value;
+
+            let url = '/api/_internal/audit/?';
+            if (search) url += `search=${encodeURIComponent(search)}&`;
+            if (eventType) url += `event_type=${encodeURIComponent(eventType)}&`;
+            if (severity) url += `severity=${encodeURIComponent(severity)}&`;
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) return;
+                const logs = await res.json();
+                const tbody = document.getElementById('audit-table-body');
+                if (logs && logs.length > 0) {
+                    tbody.innerHTML = logs.map(l => `
+                        <tr>
+                            <td style="font-size: 0.78rem; color: var(--text-muted);">${new Date(l.timestamp).toLocaleString()}</td>
+                            <td><span class="badge ${l.severity === 'CRITICAL' ? 'badge-danger' : (l.severity === 'WARNING' ? 'badge-warning' : 'badge-info')}">${l.severity}</span></td>
+                            <td style="font-weight: 600; color: #ffffff;">${l.event_type}</td>
+                            <td class="mono" style="color: #60a5fa; font-size: 0.8rem;">${l.actor || 'anonymous'}</td>
+                            <td><span class="badge ${l.status_code >= 400 ? 'badge-danger' : 'badge-success'}">${l.status_code || '-'}</span></td>
+                            <td class="mono" style="color: var(--text-muted); font-size: 0.8rem;">${l.ip_address || '-'}</td>
+                            <td class="mono" style="font-size: 0.75rem; color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${JSON.stringify(l.details)}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No audit events match filters.</td></tr>';
+                }
+            } catch (e) {
+                console.error('Failed to load audit logs:', e);
+            }
+        }
+
+        function exportAudit(fmt) {
+            window.location.href = `/api/_internal/audit/export/?format=${fmt}`;
+        }
+
+        // --- Health Tab ---
+        async function loadHealthStatus() {
+            try {
+                const res = await fetch('/health/ready/');
+                const data = await res.json();
+                document.getElementById('health-ready-val').textContent = data.status.toUpperCase();
+                document.getElementById('health-ready-val').style.color = data.status === 'ready' ? '#34d399' : '#f87171';
+
+                const dbBody = document.getElementById('health-db-body');
+                const dbs = data.checks && data.checks.databases ? data.checks.databases : {};
+                const keys = Object.keys(dbs);
+
+                if (keys.length > 0) {
+                    dbBody.innerHTML = keys.map(k => {
+                        const info = dbs[k];
+                        return `
+                            <tr>
+                                <td style="font-weight: 700; color: #ffffff;">${k}</td>
+                                <td><span class="badge ${info.status === 'connected' ? 'badge-success' : 'badge-danger'}">${info.status}</span></td>
+                                <td><span class="badge badge-info">${info.db_engine || 'Unknown'}</span></td>
+                                <td class="mono">${info.latency_ms !== undefined ? info.latency_ms + ' ms' : '-'}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    dbBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No databases detected.</td></tr>';
+                }
+            } catch (e) {
+                console.error('Failed to fetch health status:', e);
+            }
+        }
+
+        // Initial Load
+        loadAnalytics();
+    </script>
+</body>
+
+</html>

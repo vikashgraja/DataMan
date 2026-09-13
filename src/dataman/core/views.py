@@ -474,10 +474,103 @@ class AuditLogViewSet(viewsets.ViewSet):
         return response
 
 
+@api_view(["GET"])
+@authentication_classes([CsrfExemptSessionAuthentication, ServiceTokenAuthentication])
+@permission_classes([IsAdminOrLocal])
+def catalog_summary(request):
+    """Returns all registered tables grouped by database, along with fields and row counts."""
+    from dataman.core.models import TABLE_REGISTRY
+    from django.conf import settings
+
+    databases = list(getattr(settings, "DATABASES", {"default": {}}).keys())
+    db_tables = {db: [] for db in databases}
+
+    seen_models = set()
+    for name, entry in TABLE_REGISTRY.items():
+        model = entry.get("model")
+        if not model or model in seen_models:
+            continue
+        seen_models.add(model)
+        db = entry.get("database", "default")
+        if db not in db_tables:
+            db_tables[db] = []
+
+        fields = [
+            {
+                "name": f.name,
+                "type": f.get_internal_type(),
+                "null": f.null,
+                "primary_key": f.primary_key,
+            }
+            for f in model._meta.fields
+        ]
+
+        count = 0
+        try:
+            count = model.objects.using(db).count()
+        except Exception:
+            pass
+
+        db_tables[db].append(
+            {
+                "model_name": model.__name__,
+                "table_name": entry.get("table_name", model.__name__),
+                "db_table": model._meta.db_table,
+                "database": db,
+                "fields": fields,
+                "row_count": count,
+            }
+        )
+
+    return Response(
+        {
+            "databases": databases,
+            "tables_by_db": db_tables,
+            "total_tables": len(seen_models),
+        }
+    )
+
+
+@api_view(["GET"])
+@authentication_classes([CsrfExemptSessionAuthentication, ServiceTokenAuthentication])
+@permission_classes([IsAdminOrLocal])
+def table_records_view(request, table_name):
+    """Returns paginated rows for a registered table."""
+    from dataman.core.models import TABLE_REGISTRY
+
+    entry = TABLE_REGISTRY.get(table_name) or TABLE_REGISTRY.get(table_name.lower())
+    if not entry or "model" not in entry:
+        return Response(
+            {"error": f"Table '{table_name}' not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    model = entry["model"]
+    db = entry.get("database", "default")
+    limit = min(int(request.query_params.get("limit", 50)), 200)
+
+    try:
+        qs = model.objects.using(db).all()
+        total = qs.count()
+        rows = list(qs.values()[:limit])
+        return Response(
+            {
+                "table": table_name,
+                "database": db,
+                "total_records": total,
+                "records": rows,
+            }
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 @user_passes_test(lambda u: u.is_superuser, login_url="/admin/login/")
 def dashboard_view(request):
-    """Serves the dashboard HTML."""
-    return render(request, "dashboard.html")
+    """Serves the Prefect-inspired DataMan Console."""
+    return render(request, "admin/dashboard.html")
 
 
 @api_view(["GET"])
@@ -515,6 +608,7 @@ def health_ready(request):
             info = {
                 "status": "connected",
                 "vendor": conn.vendor,
+                "db_engine": conn.vendor,
                 "latency_ms": db_latency,
             }
             db_checks[alias] = info

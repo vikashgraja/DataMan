@@ -1,11 +1,10 @@
 import concurrent.futures
 import contextlib
 import importlib
-import logging
 
 import requests
 from django.apps import apps
-from django.contrib import admin
+from django.contrib.auth import views as auth_views
 from django.urls import include, path
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.views import (
@@ -22,17 +21,19 @@ from urllib3.util.retry import Retry
 
 from .audit import log_audit_event
 from .masking import mask_value
-from .models import APILog, APIToken, AuditLog, TABLE_REGISTRY
+from .models import TABLE_REGISTRY
 from .views import (
     APITokenViewSet,
     AuditLogViewSet,
     analytics_export,
     analytics_logs,
     analytics_summary,
+    catalog_summary,
     dashboard_view,
     health_check,
     health_live,
     health_ready,
+    table_records_view,
 )
 
 router = routers.DefaultRouter()
@@ -430,7 +431,18 @@ internal_router.register(r"tokens", APITokenViewSet, basename="tokens")
 internal_router.register(r"audit", AuditLogViewSet, basename="audit")
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path(
+        "admin/login/",
+        auth_views.LoginView.as_view(template_name="admin/login.html", next_page="/admin/"),
+        name="admin-login",
+    ),
+    path(
+        "admin/logout/",
+        auth_views.LogoutView.as_view(next_page="/admin/login/"),
+        name="admin-logout",
+    ),
+    path("admin/", dashboard_view, name="admin-dashboard"),
+    path("dashboard/", dashboard_view, name="dashboard"),
     path("", include(router.urls)),
     path("health/", health_check, name="health"),
     path("health/live/", health_live, name="health-live"),
@@ -449,7 +461,12 @@ urlpatterns = [
     ),
     path("api/_internal/analytics/logs/", analytics_logs, name="analytics-logs"),
     path("api/_internal/analytics/export/", analytics_export, name="analytics-export"),
+    path("api/_internal/catalog/", catalog_summary, name="analytics-catalog"),
+    path(
+        "api/_internal/table-records/<str:table_name>/",
+        table_records_view,
+        name="api-table-records",
+    ),
     path("api/_internal/", include(internal_router.urls)),
-    path("dashboard/", dashboard_view, name="dashboard"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 ]
