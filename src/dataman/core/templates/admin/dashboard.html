@@ -942,7 +942,10 @@
                     <p>Live vitality metrics, database connectivity, and migration synchronization</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-primary" onclick="loadHealthStatus()">Run Probe</button>
+                    <button class="btn btn-primary" id="run-probe-btn" onclick="loadHealthStatus()" style="display: inline-flex; align-items: center; gap: 8px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="probe-spinner" style="display:none; animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                        <span id="probe-btn-text">Run Probe</span>
+                    </button>
                 </div>
             </div>
 
@@ -1016,10 +1019,12 @@
             </div>
             <div id="token-result-content" class="hidden">
                 <p style="color: #34d399; font-weight: 600; margin-bottom: 0.5rem;">Token created successfully!</p>
-                <p style="font-size: 0.82rem; color: var(--text-muted);">Copy this key now. You will not be able to view
-                    it again.</p>
-                <div class="token-reveal-banner">
-                    <code id="revealed-token-key"></code>
+                <p style="font-size: 0.82rem; color: var(--text-muted);">Copy this key now. You will not be able to view it again.</p>
+                <div class="token-reveal-banner" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0.85rem 1.15rem;">
+                    <code id="revealed-token-key" style="font-size: 0.95rem; font-weight: 700; color: #34d399;"></code>
+                    <button class="btn btn-sm btn-outline" id="copy-token-btn" onclick="copyRevealedToken()" style="padding: 6px 12px; font-size: 0.8rem; white-space: nowrap;">
+                        <span id="copy-btn-text">Copy Key</span>
+                    </button>
                 </div>
                 <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
                     <button class="btn btn-primary" onclick="closeTokenModal()">Done</button>
@@ -1244,14 +1249,28 @@
                 });
                 const data = await res.json();
                 if (res.ok) {
+                    const rawKey = data.token || data.key || data.raw_token || '';
                     document.getElementById('token-form-content').classList.add('hidden');
                     document.getElementById('token-result-content').classList.remove('hidden');
-                    document.getElementById('revealed-token-key').textContent = data.key;
+                    document.getElementById('revealed-token-key').textContent = rawKey;
                 } else {
-                    alert('Error: ' + JSON.stringify(data));
+                    alert('Error: ' + (data.error || JSON.stringify(data)));
                 }
             } catch (e) {
                 alert('Request failed: ' + e.message);
+            }
+        }
+
+        function copyRevealedToken() {
+            const tokenText = document.getElementById('revealed-token-key').textContent;
+            if (tokenText && navigator.clipboard) {
+                navigator.clipboard.writeText(tokenText).then(() => {
+                    const btnText = document.getElementById('copy-btn-text');
+                    if (btnText) {
+                        btnText.textContent = 'Copied!';
+                        setTimeout(() => { btnText.textContent = 'Copy Key'; }, 2000);
+                    }
+                });
             }
         }
 
@@ -1307,11 +1326,38 @@
 
         // --- Health Tab ---
         async function loadHealthStatus() {
+            const btn = document.getElementById('run-probe-btn');
+            const btnText = document.getElementById('probe-btn-text');
+            const spinner = document.getElementById('probe-spinner');
+            if (btnText) btnText.textContent = 'Probing...';
+            if (spinner) spinner.style.display = 'inline-block';
+            if (btn) btn.disabled = true;
+
             try {
+                // Check liveness probe
+                try {
+                    const liveRes = await fetch('/health/live/');
+                    if (liveRes.ok) {
+                        const liveData = await liveRes.json();
+                        const liveEl = document.getElementById('health-live-val');
+                        if (liveEl) {
+                            liveEl.textContent = (liveData.status || 'ALIVE').toUpperCase();
+                            liveEl.style.color = '#34d399';
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Liveness probe failed:', err);
+                }
+
+                // Check readiness & multi-db probe
                 const res = await fetch('/health/ready/');
                 const data = await res.json();
-                document.getElementById('health-ready-val').textContent = data.status.toUpperCase();
-                document.getElementById('health-ready-val').style.color = data.status === 'ready' ? '#34d399' : '#f87171';
+                const isReady = (data.status || '').toLowerCase() === 'ready';
+                const readyEl = document.getElementById('health-ready-val');
+                if (readyEl) {
+                    readyEl.textContent = (data.status || 'UNKNOWN').toUpperCase();
+                    readyEl.style.color = isReady ? '#34d399' : '#f87171';
+                }
 
                 const dbBody = document.getElementById('health-db-body');
                 const dbs = data.checks && data.checks.databases ? data.checks.databases : {};
@@ -1320,11 +1366,15 @@
                 if (keys.length > 0) {
                     dbBody.innerHTML = keys.map(k => {
                         const info = dbs[k];
+                        const isConn = info.status === 'connected';
                         return `
                             <tr>
                                 <td style="font-weight: 700; color: #ffffff;">${k}</td>
-                                <td><span class="badge ${info.status === 'connected' ? 'badge-success' : 'badge-danger'}">${info.status}</span></td>
-                                <td><span class="badge badge-info">${info.db_engine || 'Unknown'}</span></td>
+                                <td>
+                                    <span class="badge ${isConn ? 'badge-success' : 'badge-danger'}">${info.status}</span>
+                                    ${info.error ? `<div style="font-size:0.75rem; color:#fca5a5; margin-top:4px;">${info.error}</div>` : ''}
+                                </td>
+                                <td><span class="badge badge-info">${info.db_engine || info.vendor || 'sqlite'}</span></td>
                                 <td class="mono">${info.latency_ms !== undefined ? info.latency_ms + ' ms' : '-'}</td>
                             </tr>
                         `;
@@ -1334,6 +1384,10 @@
                 }
             } catch (e) {
                 console.error('Failed to fetch health status:', e);
+            } finally {
+                if (btnText) btnText.textContent = 'Run Probe';
+                if (spinner) spinner.style.display = 'none';
+                if (btn) btn.disabled = false;
             }
         }
 
