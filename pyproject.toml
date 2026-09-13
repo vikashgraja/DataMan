@@ -60,6 +60,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "bandit>=1.9.4",
+    "playwright>=1.62.0",
     "pre-commit>=4.6.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
