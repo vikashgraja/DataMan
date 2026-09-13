@@ -1,0 +1,41 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  pypi-publish:
+    name: Build and publish distribution to PyPI
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/dataman
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Build distribution artifacts
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
