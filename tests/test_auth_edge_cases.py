@@ -113,3 +113,101 @@ print("SUCCESS")
 """
         Path("run_test.py").write_text(script)
         subprocess.check_call([sys.executable, "run_test.py"])
+
+
+def test_admin_change_password_api(tmp_path):
+    """Test frontend admin change password API endpoint."""
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        runner.invoke(cli, ["init"])
+
+        script = """
+import os
+os.environ["ALLOWED_HOSTS"] = "*"
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+
+from dataman import django_setup
+django_setup.setup()
+
+from django.core.management import call_command
+call_command("migrate")
+
+from django.contrib.auth.models import User
+from rest_framework.test import APIClient
+from dataman.core.models import AuditLog
+
+# Create admin user
+admin_user = User.objects.create_superuser("adminuser", "admin@example.com", "OldPassword123!")
+
+client = APIClient()
+
+# 1. Unauthenticated -> 401/403
+r_unauth = client.post("/admin/api/change-password/", {
+    "old_password": "OldPassword123!",
+    "new_password": "NewPassword456!",
+    "confirm_password": "NewPassword456!",
+}, format="json")
+assert r_unauth.status_code in (401, 403)
+
+# Force login
+client.force_authenticate(user=admin_user)
+
+# 2. Missing fields -> 400
+r_missing = client.post("/admin/api/change-password/", {
+    "old_password": "",
+    "new_password": "NewPassword456!",
+    "confirm_password": "NewPassword456!",
+}, format="json")
+assert r_missing.status_code == 400
+assert "required" in r_missing.json()["error"]
+
+# 3. Password mismatch -> 400
+r_mismatch = client.post("/admin/api/change-password/", {
+    "old_password": "OldPassword123!",
+    "new_password": "NewPassword456!",
+    "confirm_password": "MismatchPassword999!",
+}, format="json")
+assert r_mismatch.status_code == 400
+assert "do not match" in r_mismatch.json()["error"]
+
+# 4. Too short -> 400
+r_short = client.post("/admin/api/change-password/", {
+    "old_password": "OldPassword123!",
+    "new_password": "short",
+    "confirm_password": "short",
+}, format="json")
+assert r_short.status_code == 400
+assert "at least 8" in r_short.json()["error"]
+
+# 5. Incorrect old password -> 400
+r_wrong = client.post("/admin/api/change-password/", {
+    "old_password": "WrongPassword999!",
+    "new_password": "NewValidPassword456!",
+    "confirm_password": "NewValidPassword456!",
+}, format="json")
+assert r_wrong.status_code == 400
+assert "incorrect" in r_wrong.json()["error"]
+
+# 6. Success -> 200
+r_success = client.post("/admin/api/change-password/", {
+    "old_password": "OldPassword123!",
+    "new_password": "NewValidPassword456!",
+    "confirm_password": "NewValidPassword456!",
+}, format="json")
+assert r_success.status_code == 200
+assert r_success.json()["status"] == "success"
+
+# Verify password actually updated
+admin_user.refresh_from_db()
+assert admin_user.check_password("NewValidPassword456!") is True
+assert admin_user.check_password("OldPassword123!") is False
+
+# Verify audit log recorded
+assert AuditLog.objects.filter(event_type="AUTH_PASSWORD_CHANGE", actor="adminuser").exists()
+
+print("PASSWORD_CHANGE_SUCCESS")
+"""
+        Path("run_test_pw.py").write_text(script)
+        subprocess.check_call([sys.executable, "run_test_pw.py"])

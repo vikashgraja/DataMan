@@ -26,6 +26,7 @@ from .models import TABLE_REGISTRY
 from .views import (
     APITokenViewSet,
     AuditLogViewSet,
+    admin_change_password_view,
     analytics_export,
     analytics_logs,
     analytics_summary,
@@ -459,6 +460,11 @@ urlpatterns = [
         name="admin-logout",
     ),
     path("admin/", dashboard_view, name="admin-dashboard"),
+    path(
+        "admin/api/change-password/",
+        admin_change_password_view,
+        name="admin-change-password",
+    ),
     path("dashboard/", dashboard_view, name="dashboard"),
     path("", include(router.urls)),
     path("health/", health_check, name="health"),

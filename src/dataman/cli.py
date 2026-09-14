@@ -439,6 +439,21 @@ def create_admin():
         raise click.Abort() from e
 
 
+@users.command(name="change-password")
+@click.argument("username", required=False, default=None)
+def change_password(username):
+    """Change the password for an admin or user."""
+    _ensure_initialized()
+    django_setup.setup()
+    try:
+        if username:
+            call_command("changepassword", username)
+        else:
+            call_command("changepassword")
+    except SystemExit as e:
+        raise click.Abort() from e
+
+
 @users.command(name="create-token")
 @click.argument("name")
 @click.option(

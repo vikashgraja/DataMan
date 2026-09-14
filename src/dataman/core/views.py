@@ -676,3 +676,62 @@ def health_ready(request):
 def health_check(request):
     """General health check endpoint combining liveness and readiness."""
     return health_ready(request._request)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def admin_change_password_view(request):
+    """Allows logged-in admin users to update their password securely from the dashboard."""
+    user = request.user
+    if not user or not user.is_authenticated:
+        return Response(
+            {"error": "Authentication required"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    old_password = request.data.get("old_password", "")
+    new_password = request.data.get("new_password", "")
+    confirm_password = request.data.get("confirm_password", "")
+
+    if not old_password or not new_password:
+        return Response(
+            {"error": "Current password and new password are required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if new_password != confirm_password:
+        return Response(
+            {"error": "New password and confirmation password do not match."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if len(new_password) < 8:
+        return Response(
+            {"error": "New password must be at least 8 characters long."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not user.check_password(old_password):
+        return Response(
+            {"error": "Current password is incorrect."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user.set_password(new_password)
+    user.save()
+
+    from django.contrib.auth import update_session_auth_hash
+
+    update_session_auth_hash(request._request, user)
+
+    log_audit_event(
+        event_type="AUTH_PASSWORD_CHANGE",
+        actor=user.username,
+        ip_address=request.META.get("REMOTE_ADDR"),
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        status_code=200,
+        severity="INFO",
+        details={"user_id": user.id, "username": user.username},
+    )
+
+    return Response({"status": "success", "message": "Password changed successfully."})
