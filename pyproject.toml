@@ -1,5 +1,5 @@
 [project]
-name = "dataman"
+name = "dataman-engine"
 version = "0.1.0"
 description = "A dynamic, headless data layer framework built on Django and DRF for instant CRUD APIs and custom business logic."
 readme = "README.md"
@@ -55,6 +55,9 @@ sigterm = true
 [build-system]
 requires = ["uv_build>=0.10.6,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "dataman"
 
 [dependency-groups]
 dev = [
