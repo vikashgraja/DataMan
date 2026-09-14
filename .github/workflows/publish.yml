@@ -17,7 +17,7 @@ jobs:
       contents: read
 
     environment:
-      name: pypi
+      name: main
       url: https://pypi.org/p/dataman-engine
 
     steps:
