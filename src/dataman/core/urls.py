@@ -6,6 +6,7 @@ import logging
 import requests
 from django.apps import apps
 from django.contrib.auth import views as auth_views
+from django.db.models import Q
 from django.urls import include, path
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.views import (
@@ -17,6 +18,7 @@ from requests.adapters import HTTPAdapter
 from rest_framework import routers, serializers, viewsets
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from urllib3.util.retry import Retry
 
@@ -38,7 +40,49 @@ from .views import (
     table_records_view,
 )
 
-router = routers.DefaultRouter()
+
+class DataManRouter(routers.DefaultRouter):
+    routes = [
+        routers.Route(
+            url=r"^{prefix}{trailing_slash}$",
+            mapping={
+                "get": "list",
+                "post": "create",
+                "query": "query_list",
+            },
+            name="{basename}-list",
+            detail=False,
+            initkwargs={"suffix": "List"},
+        ),
+        routers.DynamicRoute(
+            url=r"^{prefix}/{url_path}{trailing_slash}$",
+            name="{basename}-{url_name}",
+            detail=False,
+            initkwargs={},
+        ),
+        routers.Route(
+            url=r"^{prefix}/{lookup}{trailing_slash}$",
+            mapping={
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+                "query": "query_detail",
+            },
+            name="{basename}-detail",
+            detail=True,
+            initkwargs={"suffix": "Instance"},
+        ),
+        routers.DynamicRoute(
+            url=r"^{prefix}/{lookup}/{url_path}{trailing_slash}$",
+            name="{basename}-{url_name}",
+            detail=True,
+            initkwargs={},
+        ),
+    ]
+
+
+router = DataManRouter()
 webhook_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 
@@ -136,7 +180,7 @@ try:
         if "C" in ops:
             http_methods.extend(["post"])
         if "R" in ops:
-            http_methods.extend(["get", "head"])
+            http_methods.extend(["get", "head", "query"])
         if "U" in ops:
             http_methods.extend(["put", "patch"])
         if "D" in ops:
@@ -350,6 +394,75 @@ try:
             make_hooks(service_module, webhook_url, model_name, db_name)
         )
 
+        def custom_query_list(self, request, *args, **kwargs):
+            data = request.data if isinstance(request.data, dict) else {}
+
+            queryset = self.filter_queryset(self.get_queryset())
+
+            # 1. Payload-driven dictionary filters
+            filters = data.get("filter") or data.get("filters")
+            if not isinstance(filters, dict):
+                control_keys = {
+                    "search",
+                    "ordering",
+                    "page",
+                    "page_size",
+                    "limit",
+                    "offset",
+                }
+                filters = {k: v for k, v in data.items() if k not in control_keys}
+
+            if filters:
+                queryset = queryset.filter(**filters)
+
+            # 2. Payload-driven search
+            search_term = data.get("search")
+            s_fields = getattr(self, "search_fields", [])
+            if search_term and s_fields:
+                q_obj = Q()
+                for f_name in s_fields:
+                    q_obj |= Q(**{f"{f_name}__icontains": search_term})
+                queryset = queryset.filter(q_obj)
+
+            # 3. Payload-driven ordering
+            ordering_val = data.get("ordering")
+            if ordering_val:
+                if isinstance(ordering_val, str):
+                    orderings = [
+                        o.strip() for o in ordering_val.split(",") if o.strip()
+                    ]
+                elif isinstance(ordering_val, (list, tuple)):
+                    orderings = list(ordering_val)
+                else:
+                    orderings = []
+                if orderings:
+                    queryset = queryset.order_by(*orderings)
+
+            # 4. Pagination
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                resp = self.get_paginated_response(serializer.data)
+                resp["Accept-Query"] = "application/json"
+                return resp
+
+            serializer = self.get_serializer(queryset, many=True)
+            resp = Response(serializer.data)
+            resp["Accept-Query"] = "application/json"
+            return resp
+
+        def custom_query_detail(self, request, *args, **kwargs):
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            resp = Response(serializer.data)
+            resp["Accept-Query"] = "application/json"
+            return resp
+
+        def custom_options(self, request, *args, **kwargs):
+            resp = viewsets.ModelViewSet.options(self, request, *args, **kwargs)
+            resp["Accept-Query"] = "application/json"
+            return resp
+
         viewset_attrs = {
             "queryset": model.objects.all(),
             "serializer_class": serializer_class,
@@ -358,6 +471,9 @@ try:
             "perform_create": custom_perform_create,
             "perform_update": custom_perform_update,
             "perform_destroy": custom_perform_destroy,
+            "query_list": custom_query_list,
+            "query_detail": custom_query_detail,
+            "options": custom_options,
         }
 
         if depth is not None and depth > 0:
@@ -365,10 +481,15 @@ try:
             def custom_get_serializer_class(
                 self, r_class=read_serializer_class, w_class=serializer_class
             ):
-                if getattr(self, "action", None) in ("list", "retrieve") or (
+                if getattr(self, "action", None) in (
+                    "list",
+                    "retrieve",
+                    "query_list",
+                    "query_detail",
+                ) or (
                     hasattr(self, "request")
                     and self.request
-                    and self.request.method in ("GET", "HEAD", "OPTIONS")
+                    and self.request.method in ("GET", "HEAD", "OPTIONS", "QUERY")
                 ):
                     return r_class
                 return w_class

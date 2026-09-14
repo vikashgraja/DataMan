@@ -21,6 +21,7 @@ class HasTableScope(permissions.BasePermission):
             "get": "read",
             "head": "read",
             "options": "read",
+            "query": "read",
             "post": "write",
             "put": "write",
             "patch": "write",
