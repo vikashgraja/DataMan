@@ -19,16 +19,14 @@
 
 ## Installation
 
-Ensure you have Python 3.10+ installed.
-
-You can install DataMan (if published to PyPI) or clone the repository and install it using `uv` or `pip`:
+Ensure you have Python 3.13+ installed.
 
 ```bash
 # Using uv (Recommended)
-uv pip install -e .
+uv add dataman-engine
 
 # Using pip
-pip install -e .
+pip install dataman-engine
 ```
 
 ---

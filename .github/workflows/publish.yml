@@ -18,7 +18,7 @@ jobs:
 
     environment:
       name: pypi
-      url: https://pypi.org/p/dataman
+      url: https://pypi.org/p/dataman-engine
 
     steps:
       - name: Checkout repository
