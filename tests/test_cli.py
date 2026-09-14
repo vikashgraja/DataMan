@@ -55,6 +55,7 @@ def test_create_table_command(tmp_path):
 
         model_content = (table_dir / "models.py").read_text()
         assert "class TestTable(models.Model):" in model_content
+        assert "app_label = 'tables'" in model_content
         assert "db_table = 'testtable'" in model_content
 
         assert (table_dir / "validation.py").exists()
@@ -115,3 +116,55 @@ def test_migrations_commands(tmp_path):
 
     # Verify db.sqlite3 is created
     assert (tmp_path / "db.sqlite3").exists()
+
+
+def test_instant_migrate_and_token_creation(tmp_path):
+    """Test that dataman init -> dataman migrate -> dataman users create-token succeeds immediately."""
+    import sqlite3
+    import subprocess
+    import sys
+
+    cwd_str = str(tmp_path)
+
+    # 1. Init
+    res_init = subprocess.run(
+        [sys.executable, "-m", "dataman.cli", "init"],
+        cwd=cwd_str,
+        capture_output=True,
+        text=True,
+    )
+    assert res_init.returncode == 0, f"Init failed: {res_init.stderr}"
+
+    # 2. Instant migrate before any tables created
+    res_mig = subprocess.run(
+        [sys.executable, "-m", "dataman.cli", "migrate"],
+        cwd=cwd_str,
+        capture_output=True,
+        text=True,
+    )
+    assert res_mig.returncode == 0, f"Migrate failed: {res_mig.stderr} {res_mig.stdout}"
+    assert "Database migrated successfully" in res_mig.stdout
+
+    # 3. Create token immediately
+    res_tok = subprocess.run(
+        [sys.executable, "-m", "dataman.cli", "users", "create-token", "AdminKey"],
+        cwd=cwd_str,
+        capture_output=True,
+        text=True,
+    )
+    assert res_tok.returncode == 0, f"Token failed: {res_tok.stderr} {res_tok.stdout}"
+    assert "Created new token: AdminKey" in res_tok.stdout
+
+    # 4. Verify token exists in dataman_apitoken table in db.sqlite3
+    db_path = tmp_path / "db.sqlite3"
+    assert db_path.exists()
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT name, prefix, is_active FROM dataman_apitoken WHERE name='AdminKey'"
+    )
+    row = cur.fetchone()
+    conn.close()
+    assert row is not None
+    assert row[0] == "AdminKey"
+    assert row[2] == 1

@@ -287,7 +287,7 @@ def create_table(name, database, operations):
         f.write("    created_at = models.DateTimeField(auto_now_add=True)\n")
         f.write("    updated_at = models.DateTimeField(auto_now=True)\n\n")
         f.write("    class Meta:\n")
-        f.write("        app_label = 'dataman'\n")
+        f.write("        app_label = 'tables'\n")
         f.write(f"        db_table = '{table_name.lower()}'\n")
 
     # Write validation.py
@@ -327,12 +327,16 @@ def create_table(name, database, operations):
 
 
 @cli.command()
-def makemigration():
+@click.argument("app_label", required=False, default=None)
+def makemigration(app_label):
     """Create new migrations based on the models you have defined."""
     _ensure_initialized()
     django_setup.setup()
     try:
-        call_command("makemigrations", "dataman")
+        if app_label:
+            call_command("makemigrations", app_label)
+        else:
+            call_command("makemigrations", "tables")
         click.echo(click.style("Migrations created successfully!", fg="green"))
     except SystemExit as e:
         raise click.Abort() from e

@@ -17,6 +17,7 @@ class DataManDatabaseRouter:
         "sessions",
         "admin",
         "messages",
+        "dataman_core",
     }
 
     def _get_target_db(self, model: Any) -> str:
@@ -81,6 +82,8 @@ class DataManDatabaseRouter:
         Model-level table creation is routed strictly to the designated database.
         """
         # Internal DataMan models always live on 'default' database
+        if app_label == "dataman_core":
+            return db == "default"
         if model_name and model_name.lower() in ("apitoken", "apilog", "auditlog"):
             return db == "default"
 

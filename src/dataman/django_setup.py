@@ -32,16 +32,24 @@ def setup():
     )
 
     # Ensure migrations directory exists only in initialized projects
-    migration_module = None
+    migration_modules_dict = {
+        "dataman_core": "dataman.core.migrations",
+        "dataman": "dataman.core.migrations",
+    }
     migrations_dir = cwd / "migrations"
     if tables_dir.exists() and (tables_dir / "migrations").exists():
-        migration_module = "tables.migrations"
+        migration_modules_dict["tables"] = "tables.migrations"
     elif migrations_dir.exists():
-        migration_module = "migrations"
+        migration_modules_dict["tables"] = "migrations"
+    elif is_project and tables_dir.exists():
+        mig_dir = tables_dir / "migrations"
+        mig_dir.mkdir(parents=True, exist_ok=True)
+        (mig_dir / "__init__.py").touch()
+        migration_modules_dict["tables"] = "tables.migrations"
     elif is_project:
         migrations_dir.mkdir(parents=True, exist_ok=True)
         (migrations_dir / "__init__.py").touch()
-        migration_module = "migrations"
+        migration_modules_dict["tables"] = "migrations"
 
     import dj_database_url
 
@@ -108,7 +116,10 @@ def setup():
         "django.contrib.staticfiles",
         "rest_framework",
         "drf_spectacular",
-    ] + list(extra_apps)
+    ]
+    if tables_dir.exists():
+        installed_apps.append("tables")
+    installed_apps.extend(extra_apps)
 
     middleware = [
         "django.middleware.security.SecurityMiddleware",
@@ -137,10 +148,6 @@ def setup():
     database_routers = ["dataman.core.router.DataManDatabaseRouter"]
     if project_config and hasattr(project_config, "DATABASE_ROUTERS"):
         database_routers = list(project_config.DATABASE_ROUTERS)
-
-    migration_modules_dict = {}
-    if migration_module:
-        migration_modules_dict["dataman"] = migration_module
 
     settings.configure(
         SECRET_KEY=os.getenv("DATAMAN_SECRET_KEY", "default-insecure-key-change-me"),

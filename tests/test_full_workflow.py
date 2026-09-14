@@ -116,7 +116,7 @@ def test_full_realworld_multidb_workflow(tmp_path):
         "    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)\n"
         "    created_at = models.DateTimeField(auto_now_add=True)\n\n"
         "    class Meta:\n"
-        "        app_label = 'dataman'\n"
+        "        app_label = 'tables'\n"
         "        db_table = 'customer'\n"
     )
     (proj_dir / "tables" / "Customer" / "models.py").write_text(
@@ -155,7 +155,7 @@ def test_full_realworld_multidb_workflow(tmp_path):
         "    payload = models.JSONField(default=dict)\n"
         "    created_at = models.DateTimeField(auto_now_add=True)\n\n"
         "    class Meta:\n"
-        "        app_label = 'dataman'\n"
+        "        app_label = 'tables'\n"
         "        db_table = 'event'\n"
     )
     (proj_dir / "analytics" / "Event" / "models.py").write_text(
@@ -171,7 +171,7 @@ def test_full_realworld_multidb_workflow(tmp_path):
         "    stock = models.IntegerField(default=0)\n"
         "    created_at = models.DateTimeField(auto_now_add=True)\n\n"
         "    class Meta:\n"
-        "        app_label = 'dataman'\n"
+        "        app_label = 'tables'\n"
         "        db_table = 'product'\n"
     )
     (proj_dir / "inventory" / "Product" / "models.py").write_text(

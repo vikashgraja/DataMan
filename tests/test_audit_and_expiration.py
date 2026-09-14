@@ -26,7 +26,7 @@ def test_audit_logging_and_token_expiration(tmp_path):
             "    created_at = models.DateTimeField(auto_now_add=True)\n"
             "    updated_at = models.DateTimeField(auto_now=True)\n"
             "    class Meta:\n"
-            "        app_label = 'dataman'\n"
+            "        app_label = 'tables'\n"
             "        db_table = 'customer'\n"
         )
 
@@ -39,7 +39,7 @@ def test_audit_logging_and_token_expiration(tmp_path):
             "    created_at = models.DateTimeField(auto_now_add=True)\n"
             "    updated_at = models.DateTimeField(auto_now=True)\n"
             "    class Meta:\n"
-            "        app_label = 'dataman'\n"
+            "        app_label = 'tables'\n"
             "        db_table = 'order'\n"
         )
 

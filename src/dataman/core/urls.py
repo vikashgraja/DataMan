@@ -66,8 +66,25 @@ def dispatch_webhook(url, action, table_name, data):
 
 
 try:
-    dataman_app = apps.get_app_config("dataman")
-    for model in dataman_app.get_models():
+    models_to_process = []
+    for entry in TABLE_REGISTRY.values():
+        m = entry.get("model")
+        if m and m not in models_to_process:
+            models_to_process.append(m)
+
+    for app_name in ("tables", "dataman", "dataman_core"):
+        try:
+            app_cfg = apps.get_app_config(app_name)
+            for model in app_cfg.get_models():
+                if (
+                    model.__name__ not in ("APIToken", "APILog", "AuditLog")
+                    and model not in models_to_process
+                ):
+                    models_to_process.append(model)
+        except LookupError:
+            pass
+
+    for model in models_to_process:
         model_name = model.__name__
 
         if model_name in ("APIToken", "APILog", "AuditLog"):

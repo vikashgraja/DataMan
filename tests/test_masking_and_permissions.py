@@ -77,7 +77,7 @@ def test_end_to_end_field_encryption_and_masking_api(tmp_path):
             "    email = EncryptedEmailField()\n"
             "    created_at = models.DateTimeField(auto_now_add=True)\n\n"
             "    class Meta:\n"
-            "        app_label = 'dataman'\n"
+            "        app_label = 'tables'\n"
             "        db_table = 'securecustomer'\n",
             encoding="utf-8",
         )

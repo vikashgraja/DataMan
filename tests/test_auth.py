@@ -22,7 +22,7 @@ from dataman import django_setup
 django_setup.setup()
 
 from django.core.management import call_command
-call_command("makemigrations", "dataman")
+call_command("makemigrations")
 call_command("migrate", interactive=False)
 
 from dataman.core import urls

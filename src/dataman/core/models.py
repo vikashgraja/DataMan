@@ -43,7 +43,7 @@ class APIToken(models.Model):
     is_active = models.BooleanField(default=True, db_index=True)
 
     class Meta:
-        app_label = "dataman"
+        app_label = "dataman_core"
         db_table = "dataman_apitoken"
 
     def __str__(self):
@@ -61,7 +61,7 @@ class APILog(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
 
     class Meta:
-        app_label = "dataman"
+        app_label = "dataman_core"
         db_table = "dataman_apilog"
         ordering = ["-timestamp"]
 
@@ -82,7 +82,7 @@ class AuditLog(models.Model):
     details = models.JSONField(default=dict)
 
     class Meta:
-        app_label = "dataman"
+        app_label = "dataman_core"
         db_table = "dataman_auditlog"
         ordering = ["-timestamp"]
 

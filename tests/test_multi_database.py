@@ -123,7 +123,7 @@ def test_multi_database_cli_scaffold_and_crud(tmp_path):
         "    name = models.CharField(max_length=255)\n"
         "    email = models.EmailField()\n"
         "    class Meta:\n"
-        "        app_label = 'dataman'\n"
+        "        app_label = 'tables'\n"
         "        db_table = 'customer'\n"
     )
     (tmp_path / "tables" / "Customer" / "config.py").write_text(
@@ -138,7 +138,7 @@ def test_multi_database_cli_scaffold_and_crud(tmp_path):
         "    name = models.CharField(max_length=255)\n"
         "    metric = models.IntegerField(default=0)\n"
         "    class Meta:\n"
-        "        app_label = 'dataman'\n"
+        "        app_label = 'tables'\n"
         "        db_table = 'analytics_event'\n"
     )
     (tmp_path / "analytics" / "Event" / "config.py").write_text(
