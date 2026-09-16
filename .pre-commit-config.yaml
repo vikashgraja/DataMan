@@ -31,3 +31,10 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+      - id: tox
+        name: tox
+        entry: uv run tox
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
