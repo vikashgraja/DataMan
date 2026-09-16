@@ -360,6 +360,27 @@ try:
             "perform_destroy": custom_perform_destroy,
         }
 
+        def custom_get_queryset(self, m=model, d=depth):
+            qs = m.objects.all()
+            if d is not None and d > 0:
+                fk_fields = [
+                    f.name
+                    for f in m._meta.fields
+                    if f.is_relation and (f.many_to_one or f.one_to_one)
+                ]
+                if fk_fields:
+                    qs = qs.select_related(*fk_fields)
+                reverse_rel_fields = [
+                    f.get_accessor_name()
+                    for f in m._meta.related_objects
+                    if f.get_accessor_name()
+                ]
+                if reverse_rel_fields:
+                    qs = qs.prefetch_related(*reverse_rel_fields)
+            return qs
+
+        viewset_attrs["get_queryset"] = custom_get_queryset
+
         if depth is not None and depth > 0:
 
             def custom_get_serializer_class(
@@ -386,10 +407,88 @@ try:
         # Pagination
         if page_size:
 
+            class FastPaginator:
+                def __init__(self, object_list, per_page):
+                    self.object_list = object_list
+                    self.per_page = per_page
+                    self._count = None
+
+                @property
+                def count(self):
+                    if self._count is None:
+                        try:
+                            self._count = self.object_list.count()
+                        except Exception:
+                            self._count = 0
+                    return self._count
+
+                @property
+                def num_pages(self):
+                    if self.count == 0:
+                        return 1
+                    return (self.count + self.per_page - 1) // self.per_page
+
+                @property
+                def page_range(self):
+                    return range(1, self.num_pages + 1)
+
+                def page(self, number):
+                    number = int(number)
+                    bottom = (number - 1) * self.per_page
+                    top = bottom + self.per_page
+                    items = list(self.object_list[bottom : top + 1])
+                    has_next = len(items) > self.per_page
+                    if has_next:
+                        items = items[: self.per_page]
+
+                    class FastPage:
+                        def __init__(self, object_list, number, paginator, has_next, bottom):
+                            self.object_list = object_list
+                            self.number = number
+                            self.paginator = paginator
+                            self._has_next = has_next
+                            self._bottom = bottom
+
+                        def __len__(self):
+                            return len(self.object_list)
+
+                        def __iter__(self):
+                            return iter(self.object_list)
+
+                        def __getitem__(self, index):
+                            return self.object_list[index]
+
+                        def has_next(self):
+                            return self._has_next
+
+                        def has_previous(self):
+                            return self.number > 1
+
+                        def next_page_number(self):
+                            return self.number + 1
+
+                        def previous_page_number(self):
+                            return self.number - 1
+
+                        def start_index(self):
+                            return self._bottom + 1
+
+                        def end_index(self):
+                            return self._bottom + len(self.object_list)
+
+                    return FastPage(items, number, self, has_next, bottom)
+
             class CustomPagination(PageNumberPagination):
                 page_size_val = page_size
+                django_paginator_class = FastPaginator
+                page_size_query_param = "page_size"
+                max_page_size = 500
 
                 def get_page_size(self, request):
+                    if self.page_size_query_param:
+                        with contextlib.suppress(Exception):
+                            val = int(request.query_params.get(self.page_size_query_param, self.page_size_val))
+                            return min(max(val, 1), self.max_page_size)
                     return self.page_size_val
 
             viewset_attrs["pagination_class"] = CustomPagination
@@ -405,6 +504,8 @@ try:
         if ordering_fields:
             filter_backends.append(OrderingFilter)
             viewset_attrs["ordering_fields"] = ordering_fields
+
+        viewset_attrs["ordering"] = ["-id"]
 
         if filter_backends:
             viewset_attrs["filter_backends"] = filter_backends

@@ -16,6 +16,8 @@ RESERVED_ROOT_DIRS = {
     ".ruff_cache",
     ".system_generated",
     ".venv",
+    "benchmark",
+    "benchmarks",
     "build",
     "coverage_hack",
     "dist",

@@ -21,3 +21,5 @@ test_project/
 scratch/
 .coverage
 htmlcov/
+benchmarks/sandbox/
+/tables/

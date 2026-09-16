@@ -57,6 +57,9 @@ client.post("/api/article/", {"title": "Test 2"}, format="json")
 client.get("/api/article/")
 client.get("/api/invalid-url/") # 404
 
+from dataman.core.middleware import flush_telemetry_logs
+flush_telemetry_logs()
+
 # 2. Test Analytics Summary Endpoint
 r_summary = client.get("/api/_internal/analytics/summary/")
 assert r_summary.status_code == 200, "Analytics summary failed"

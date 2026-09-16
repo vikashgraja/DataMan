@@ -41,6 +41,7 @@ dependencies = [
     "inflection>=0.5.1",
     "uvicorn>=0.34.0",
     "cryptography>=42.0.0",
+    "psycopg2-binary>=2.9.13",
 ]
 
 [project.scripts]
@@ -64,6 +65,7 @@ module-name = "dataman"
 [dependency-groups]
 dev = [
     "bandit>=1.9.4",
+    "locust>=2.32.0",
     "playwright>=1.62.0",
     "pre-commit>=4.6.1",
     "pytest>=9.1.1",
@@ -75,8 +77,8 @@ dev = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
-exclude = [".venv", "venv", "__pycache__", "build", "dist"]
+target-version = "py312"
+exclude = [".venv", "venv", "__pycache__", "build", "dist", "benchmarks"]
 
 [tool.ruff.lint]
 select = [
@@ -98,7 +100,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.bandit]
-exclude_dirs = ["tests", ".venv"]
+exclude_dirs = ["tests", ".venv", "benchmarks"]
 skips = ["B101"]
 
 [tool.pytest.ini_options]
