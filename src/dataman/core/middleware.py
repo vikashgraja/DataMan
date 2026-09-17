@@ -116,6 +116,8 @@ class APILoggingMiddleware:
                 (request.method, path, response.status_code, duration_ms, ip)
             )
         except queue.Full:
-            logger.warning("Telemetry log queue full, dropping record under extreme load.")
+            logger.warning(
+                "Telemetry log queue full, dropping record under extreme load."
+            )
 
         return response

@@ -442,7 +442,9 @@ try:
                         items = items[: self.per_page]
 
                     class FastPage:
-                        def __init__(self, object_list, number, paginator, has_next, bottom):
+                        def __init__(
+                            self, object_list, number, paginator, has_next, bottom
+                        ):
                             self.object_list = object_list
                             self.number = number
                             self.paginator = paginator
@@ -487,7 +489,11 @@ try:
                 def get_page_size(self, request):
                     if self.page_size_query_param:
                         with contextlib.suppress(Exception):
-                            val = int(request.query_params.get(self.page_size_query_param, self.page_size_val))
+                            val = int(
+                                request.query_params.get(
+                                    self.page_size_query_param, self.page_size_val
+                                )
+                            )
                             return min(max(val, 1), self.max_page_size)
                     return self.page_size_val
 
