@@ -1,6 +1,11 @@
 # DataMan (Data MiddleMan)
 
+[![Quickstart Guide](https://img.shields.io/badge/Docs-Quickstart_Guide-blue.svg)](docs/QUICKSTART.md)
+
 **DataMan** is a dynamic, CLI-driven backend framework built on top of Django and Django REST Framework. It eliminates the boilerplate of writing standard CRUD APIs, routing, and serializers by allowing you to scaffold endpoints instantly from the command line while preserving your ability to inject custom business logic and strict validation whenever you need it.
+
+👉 **Looking to build an API in 5 minutes? Check out the [Developer Quickstart Tutorial](docs/QUICKSTART.md)!**
+
 
 ---
 
