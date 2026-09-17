@@ -101,9 +101,7 @@ class Order(models.Model):
     )
     customer_email = models.EmailField()
     quantity = models.PositiveIntegerField(default=1)
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="pending"
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -210,7 +208,9 @@ def before_create(data):
     quantity = int(data.get("quantity", 1))
 
     if product.stock_quantity < quantity:
-        raise ValidationError({"quantity": f"Only {product.stock_quantity} units available in stock."})
+        raise ValidationError(
+            {"quantity": f"Only {product.stock_quantity} units available in stock."}
+        )
 
     # Decrement inventory
     product.stock_quantity -= quantity
