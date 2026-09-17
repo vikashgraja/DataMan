@@ -13,7 +13,6 @@ classifiers = [
     "Environment :: Console",
     "Environment :: Web Environment",
     "Framework :: Django",
-    "Framework :: Django :: 5.0",
     "Framework :: Django :: 6.0",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
@@ -48,8 +47,8 @@ dependencies = [
 dataman = "dataman.cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/vikashg/dataman"
-Repository = "https://github.com/vikashg/dataman.git"
+Homepage = "https://github.com/vikashgraja/dataman"
+Repository = "https://github.com/vikashgraja/dataman.git"
 
 [tool.coverage.run]
 branch = true
