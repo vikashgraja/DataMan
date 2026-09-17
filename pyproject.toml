@@ -105,3 +105,17 @@ skips = ["B101"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+env_list = py312, py313, py314
+min_version = 4.0
+
+[testenv]
+runner = uv-venv-runner
+dependency_groups =
+    dev
+commands =
+    pytest {posargs}
+"""

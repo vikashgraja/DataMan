@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: tox
         name: tox
-        entry: uv run tox
+        entry: uv run tox run-parallel
         language: system
         pass_filenames: false
         always_run: true
