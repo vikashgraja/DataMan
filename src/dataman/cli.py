@@ -245,11 +245,18 @@ def create_table(name, database, operations):
         click.echo(click.style(f"Table '{table_name}' already exists.", fg="yellow"))
         raise click.Abort()
 
-    table_dir.mkdir(parents=True)
-    (table_dir / "__init__.py").touch()
+    cleaned_ops = operations.lower().strip()
+    if not cleaned_ops or any(char not in "crud" for char in cleaned_ops):
+        raise click.BadParameter(
+            f"Invalid operations '{operations}'. Allowed characters are 'c', 'r', 'u', 'd' (e.g. -o crud or -o cr)."
+        )
 
     ops_map = {"c": "C", "r": "R", "u": "U", "d": "D"}
-    ops_list = [ops_map[char] for char in operations.lower() if char in ops_map]
+    seen = set()
+    ops_list = [ops_map[c] for c in cleaned_ops if not (c in seen or seen.add(c))]
+
+    table_dir.mkdir(parents=True)
+    (table_dir / "__init__.py").touch()
 
     # Write config.py
     with open(table_dir / "config.py", "w") as f:

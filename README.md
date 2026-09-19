@@ -24,7 +24,7 @@
 
 ## Installation
 
-Ensure you have Python 3.13+ installed.
+Ensure you have Python 3.12+ installed.
 
 ```bash
 # Using uv (Recommended)

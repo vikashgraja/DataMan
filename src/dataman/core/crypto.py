@@ -62,20 +62,33 @@ class AESGCMCryptoProvider(BaseCryptoProvider):
         elif isinstance(key, bytes) and key:
             secret_source = key
         else:
-            # Check environment variables or Django settings
+            # 1. Check explicit DATAMAN_ENCRYPTION_KEY from environment
             env_key = os.getenv("DATAMAN_ENCRYPTION_KEY")
             if env_key:
                 secret_source = env_key.encode("utf-8")
             else:
-                secret_key = os.getenv(
-                    "DATAMAN_SECRET_KEY", "default-insecure-key-change-me"
-                )
-                with contextlib.suppress(Exception):
-                    from django.conf import settings
+                # 2. Check DATAMAN_SECRET_KEY from environment
+                secret_key = os.getenv("DATAMAN_SECRET_KEY")
+                # 3. Check Django SECRET_KEY if configured
+                if not secret_key:
+                    with contextlib.suppress(Exception):
+                        from django.conf import settings
 
-                    if settings.configured and getattr(settings, "SECRET_KEY", None):
-                        secret_key = settings.SECRET_KEY
-                secret_source = secret_key.encode("utf-8")
+                        if settings.configured and getattr(
+                            settings, "SECRET_KEY", None
+                        ):
+                            secret_key = settings.SECRET_KEY
+
+                if secret_key:
+                    secret_source = secret_key.encode("utf-8")
+
+        if not secret_source:
+            from django.core.exceptions import ImproperlyConfigured
+
+            raise ImproperlyConfigured(
+                "DataMan Encryption Key is not configured. Please set DATAMAN_ENCRYPTION_KEY "
+                "or DATAMAN_SECRET_KEY environment variable, or configure Django SECRET_KEY."
+            )
 
         # Derive a cryptographically strong 256-bit key using HKDF-SHA256
         hkdf = HKDF(

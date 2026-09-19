@@ -84,7 +84,7 @@ with mock.patch("django.db.connection.ensure_connection", side_effect=Exception(
     fail_data = r_fail.json()
     assert fail_data["status"] == "unhealthy"
     assert fail_data["checks"]["database"]["status"] == "disconnected"
-    assert "Database down" in fail_data["checks"]["database"]["error"]
+    assert "error" not in fail_data["checks"]["database"]
 
 # 6. Test Pending Migration Scenario (503 Service Unavailable)
 with mock.patch("django.db.migrations.executor.MigrationExecutor.migration_plan", return_value=[("dataman", "0002_new")]):

@@ -73,10 +73,15 @@ client = APIClient()
 r1 = client.get("/api/order/")
 assert r1.status_code == 403
 
-# 2. Bad token format -> 403 Forbidden
+# 2. Valid Bearer token authentication -> 200 OK
 client.credentials(HTTP_AUTHORIZATION="Bearer " + raw_read_token)
-r2 = client.get("/api/order/")
-assert r2.status_code == 403
+r2_bearer = client.get("/api/order/")
+assert r2_bearer.status_code == 200
+
+# 2b. Unsupported scheme (Basic) -> 403 Forbidden
+client.credentials(HTTP_AUTHORIZATION="Basic " + raw_read_token)
+r2_basic = client.get("/api/order/")
+assert r2_basic.status_code == 403
 
 # 3. Invalid token key -> 403 Forbidden
 client.credentials(HTTP_AUTHORIZATION="Token invalid_key_here")

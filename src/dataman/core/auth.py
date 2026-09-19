@@ -25,7 +25,7 @@ class ServiceTokenAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
         auth = request.headers.get("Authorization", "").split()
 
-        if not auth or auth[0].lower() != "token":
+        if not auth or auth[0].lower() not in ("token", "bearer"):
             return None
 
         if len(auth) == 1 or len(auth) > 2:

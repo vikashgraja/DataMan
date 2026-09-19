@@ -3,6 +3,7 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import secrets
 import time
 from datetime import timedelta
@@ -28,6 +29,8 @@ from rest_framework.response import Response
 from .audit import log_audit_event
 from .auth import CsrfExemptSessionAuthentication, ServiceTokenAuthentication
 from .models import APILog, APIToken, AuditLog
+
+logger = logging.getLogger(__name__)
 
 
 class CSVRenderer(BaseRenderer):
@@ -612,10 +615,12 @@ def health_ready(request):
             if alias == "default" or default_db_info is None:
                 default_db_info = info
         except Exception as e:
+            logger.error(
+                "Health check DB connection failed for alias '%s': %s", alias, e
+            )
             is_healthy = False
             info = {
                 "status": "disconnected",
-                "error": str(e),
             }
             db_checks[alias] = info
             if alias == "default" or default_db_info is None:
@@ -624,7 +629,6 @@ def health_ready(request):
     checks["databases"] = db_checks
     checks["database"] = default_db_info or {
         "status": "disconnected",
-        "error": "No database configured",
     }
 
     # 2. Migrations check
@@ -644,10 +648,12 @@ def health_ready(request):
             if unapplied > 0:
                 is_healthy = False
         except Exception as e:
+            logger.error(
+                "Health check migration scan failed for alias '%s': %s", alias, e
+            )
             is_healthy = False
             all_migrations[alias] = {
                 "status": "error",
-                "error": str(e),
             }
 
     checks["all_migrations"] = all_migrations
