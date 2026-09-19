@@ -1,21 +1,21 @@
-# 🚀 DataMan Developer Quickstart Guide
+# DataMan Developer Quickstart Guide
 
 Welcome to **DataMan**! This hands-on guide will take you from zero to a live, production-grade REST API backend in under 5 minutes.
 
 ---
 
-## ⚡ What is DataMan?
+## What is DataMan?
 
 DataMan is a headless backend engine built on top of Django and Django REST Framework. It allows you to:
-- 🏗️ **Scaffold APIs instantly** from simple model definitions.
-- ⚡ **Zero Boilerplate**: No manual serializers, views, or routing required.
-- 🧩 **Inject Custom Logic**: Use lifecycle hooks (`service.py`) and data validators (`validation.py`).
-- 🔐 **Granular Token Auth**: Per-table and per-operation API tokens out of the box.
-- 🚀 **High Concurrency**: ASGI / Uvicorn support with sub-millisecond query execution.
+- Scaffold APIs instantly from simple model definitions.
+- Zero Boilerplate: No manual serializers, views, or routing required.
+- Inject Custom Logic: Use lifecycle hooks (`service.py`) and data validators (`validation.py`).
+- Granular Token Auth: Per-table and per-operation API tokens out of the box.
+- High Concurrency: ASGI / Uvicorn support with sub-millisecond query execution.
 
 ---
 
-## ⏱️ 5-Minute Tutorial: Build an E-Commerce Store API
+## 5-Minute Tutorial: Build an E-Commerce Store API
 
 ### Step 1: Install DataMan
 
@@ -123,11 +123,11 @@ dataman migrate
 dataman server start
 ```
 
-Your API is now live at **`http://127.0.0.1:8000/api/`**! 🎉
+Your API is now live at **`http://127.0.0.1:8000/api/`**!
 
 ---
 
-## 📡 Testing Your Endpoints
+## Testing Your Endpoints
 
 ### 1. Create a Product (`POST /api/product/`)
 ```bash
@@ -178,7 +178,7 @@ curl "http://127.0.0.1:8000/api/order/1/?depth=1"
 
 ---
 
-## 🧠 Adding Custom Business Logic & Validation
+## Adding Custom Business Logic & Validation
 
 ### 1. Data Validation (`tables/Product/validation.py`)
 Add custom validation before records are saved to the database:
@@ -220,7 +220,7 @@ def before_create(data):
 
 ---
 
-## 🔐 Securing Endpoints with Scoped API Tokens
+## Securing Endpoints with Scoped API Tokens
 
 ### 1. Create a Restricted API Token
 ```bash
@@ -239,7 +239,7 @@ curl http://127.0.0.1:8000/api/product/ \
 
 ---
 
-## 🩺 Production Health & Monitoring
+## Production Health & Monitoring
 
 DataMan includes built-in health probes:
 
@@ -253,7 +253,7 @@ curl http://127.0.0.1:8000/health/ready/
 
 ---
 
-## 🚀 High-Concurrency ASGI Production Mode
+## High-Concurrency ASGI Production Mode
 
 To run DataMan with asynchronous ASGI workers (powered by Uvicorn):
 
@@ -263,7 +263,7 @@ dataman server start --asgi --host 0.0.0.0 --port 8000 --workers 4
 
 ---
 
-## 📋 CLI Quick Reference
+## CLI Quick Reference
 
 | Command | Description |
 | :--- | :--- |

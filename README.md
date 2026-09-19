@@ -1,114 +1,127 @@
 # DataMan (Data MiddleMan)
 
-[![Quickstart Guide](https://img.shields.io/badge/Docs-Quickstart_Guide-blue.svg)](docs/QUICKSTART.md)
+[![Quickstart Guide](https://img.shields.io/badge/Docs-Quickstart_Guide-blue.svg)](https://github.com/vikashgraja/DataMan/blob/main/docs/QUICKSTART.md)
+[![Databases](https://img.shields.io/badge/Databases-PostgreSQL%20%7C%20MySQL%20%7C%20SQLite-success.svg)](#supported-databases)
+[![ASGI Engine](https://img.shields.io/badge/ASGI-Uvicorn%20Ready-purple.svg)](#asgi-production-mode)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/vikashgraja/DataMan/blob/main/LICENSE)
 
-**DataMan** is a dynamic, CLI-driven backend framework built on top of Django and Django REST Framework. It eliminates the boilerplate of writing standard CRUD APIs, routing, and serializers by allowing you to scaffold endpoints instantly from the command line while preserving your ability to inject custom business logic and strict validation whenever you need it.
+**DataMan** is a dynamic, headless backend engine built on top of Django and Django REST Framework. It eliminates the boilerplate of writing standard CRUD APIs, routing, and serializers by allowing you to scaffold endpoints instantly from the command line while preserving your ability to inject custom business logic and strict validation whenever you need it.
 
-👉 **Looking to build an API in 5 minutes? Check out the [Developer Quickstart Tutorial](docs/QUICKSTART.md)!**
-
-
----
-
-## Features
-- **Instant CRUD APIs**: Automatically generate RESTful APIs from simple model definitions.
-- **CLI Scaffolding**: Setup projects and table structures with simple commands.
-- **Hook-Based Business Logic**: Inject custom logic via `service.py` (`before_create`, `after_delete`, etc.) without touching serializers or viewsets.
-- **Validation Injection**: Run custom data validators before database commits via `validation.py`.
-- **Fine-Grained Authentication**: Lock down endpoints using granular, table-and-operation specific scopes (e.g., `customer:read`, `order:write`).
-- **Dynamic Routing & Pagination**: Built-in DRF integration with default pagination and dynamic URL mappings.
-- **Production Health Probes**: Built-in `/health/live/` and `/health/ready/` endpoints for Kubernetes/Docker container monitoring, database vitality, and migration checks.
-- **Multi-Database Routing**: Organize tables by database directory (`<database>/<table>`) and route traffic, migrations, and health checks across isolated databases.
-- **ASGI High-Concurrency Engine**: Built-in `uvicorn` server execution mode (`dataman server start --asgi`) for high throughput asynchronous performance.
+Looking to build an API in 5 minutes? Check out the [Developer Quickstart Tutorial](https://github.com/vikashgraja/DataMan/blob/main/docs/QUICKSTART.md).
 
 ---
 
-## Installation
+## 30-Second Demo: Instant REST API
 
-Ensure you have Python 3.12+ installed.
+Get a fully functional, paginated, and documented REST API running in 4 commands:
 
 ```bash
-# Using uv (Recommended)
-uv add dataman-engine
-
-# Using pip
+# 1. Install DataMan
 pip install dataman-engine
+
+# 2. Initialize project in current directory
+dataman init
+
+# 3. Scaffold an Employee table with full CRUD operations
+dataman create table Employee -o crud
+
+# 4. Apply migrations and start the server
+dataman makemigration && dataman migrate
+dataman server start
 ```
+
+### What You Get Instantly:
+* **`GET    /api/employee/`** — Paginated list with multi-column filtering, search, and ordering.
+* **`POST   /api/employee/`** — Create records with validation and lifecycle hooks.
+* **`GET    /api/employee/{id}/`** — Point lookup with automatic relational joins (`?depth=1`).
+* **`PUT    /api/employee/{id}/`** — Full update.
+* **`PATCH  /api/employee/{id}/`** — Partial update.
+* **`DELETE /api/employee/{id}/`** — Delete record.
+* **Interactive Swagger UI**: [`http://127.0.0.1:8000/api/docs/`](http://127.0.0.1:8000/api/docs/)
+* **OpenAPI 3.0 Schema**: [`http://127.0.0.1:8000/api/schema/`](http://127.0.0.1:8000/api/schema/)
 
 ---
 
-## Quick Start
+## Why DataMan?
 
-Get a full REST API running in under a minute!
+Building standard CRUD backends with existing frameworks requires boilerplate code:
 
-### 1. Initialize a Project
-Run the following in an empty directory to scaffold the necessary environment:
-```bash
-dataman init
-```
-This generates your project configuration:
 ```text
-my-project/
-├── .env           # Environment variables & secrets
-├── database.py    # Database connection & pooling (SQLite default, Postgres, MySQL)
-├── config.py      # Project settings (Hosts, CORS, pagination, custom middleware)
-└── tables/        # API tables & database migrations
+Without DataMan:
+Model ---> Serializer ---> ViewSet ---> Router ---> FilterSet ---> Permissions
+
+With DataMan:
+Model ---> Done! (Instant REST Endpoints + Swagger Docs + Auth)
 ```
 
-### 2. Configure Database & Project Settings (Optional)
-Easily customize your database backend in `database.py` (e.g., PostgreSQL or MySQL) and global settings in `config.py`:
-```python
-# database.py
-DATABASES = {
-    "default": dj_database_url.config(
-        default="postgres://user:pass@localhost:5432/my_db",
-        conn_max_age=600,
-    )
+### Framework Comparison
+
+| Framework | CRUD API Setup Requirements |
+| :--- | :--- |
+| **Django REST Framework (DRF)** | Model + Serializer + ViewSet + Router + FilterSet + Permissions |
+| **FastAPI** | SQLAlchemy Model + Pydantic Schema + Router + Endpoints + Dependency Injection |
+| **DataMan** | **Django Model Only (Instant Endpoints, Swagger, Auth & Hooks)** |
+
+---
+
+## Out-of-the-Box API Features
+
+Every scaffolded endpoint automatically delivers production response envelopes:
+
+```json
+// GET /api/employee/?is_active=true&search=Engineering&ordering=-created_at
+{
+  "count": 48,
+  "next": "http://127.0.0.1:8000/api/employee/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 101,
+      "name": "Jane Doe",
+      "department": "Engineering",
+      "email": "jane.doe@example.com",
+      "is_active": true,
+      "created_at": "2026-09-19T18:00:00Z"
+    }
+  ]
 }
 ```
 
-### 3. Create a Table
-Scaffold a new table (e.g., `Customer`) with full CRUD operations (`-o crud`):
-```bash
-dataman create table Customer -o crud
-```
-
-### 4. Define Your Fields
-Open the generated `tables/Customer/models.py` and define your Django fields:
-```python
-from django.db import models
-
-
-class Customer(models.Model):
-    name = models.CharField(max_length=255)
-    email = models.EmailField(unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "customer"
-```
-
-### 4. Migrate and Run
-Apply the database migrations and start the server!
-```bash
-dataman makemigration
-dataman migrate
-
-# Start development WSGI server
-dataman server start
-
-# OR start high-concurrency production ASGI server with Uvicorn
-dataman server start --asgi --host 0.0.0.0 --port 8000 --workers 4
-```
-*Your API is now live at `http://127.0.0.1:8000/api/customer/`!*
+* **Filtering**: Filter by query params (e.g., `?is_active=true&salary__gte=80000`).
+* **Fast B-Tree Prefix Search**: Full-text prefix seeks on indexed columns (e.g., `?search=Jane`).
+* **Multi-Column Ordering**: Sort descending or ascending (e.g., `?ordering=-created_at,salary`).
+* **Fast Pagination**: Sliced pagination without expensive full-table `COUNT(*)` overhead on million-row tables.
+* **Relational Expansion**: Expand foreign keys automatically (e.g., `?depth=1`).
 
 ---
 
-## Advanced Usage
+## Supported Databases
 
-DataMan abstracts away the boring parts but leaves you full control over the important logic. Every table generated under `tables/<TableName>/` comes with four critical files:
+DataMan provides native connection pooling, health probes, and migration routing for:
+
+| Database | Support Level | Recommended Use |
+| :--- | :--- | :--- |
+| **PostgreSQL** | Primary / Production | 1M+ scale workloads, multi-database routing, high-concurrency ASGI |
+| **MySQL / MariaDB** | Production | Enterprise relational storage with connection lifecycle pooling |
+| **SQLite** | Prototyping | Zero-configuration local development and rapid test suites |
+
+---
+
+## Enterprise Adoption & Target Use Cases
+
+DataMan is designed for data-intensive enterprise architectures:
+* Continuous Control Monitoring (CCM) & internal audit platforms.
+* SAP & ERP Data Middleware: Expose transactional SQL stores as structured REST APIs.
+* Master Data Management (MDM): Instant CRUD data maintenance portals.
+* Approval Workflows & Vendor Portals: Scoped, token-authenticated transactional APIs.
+
+---
+
+## Advanced Features
+
+Every table generated under `tables/<TableName>/` gives you modular files for fine-grained control:
 
 ### 1. `config.py` (API Settings)
-Control exactly what HTTP methods are exposed and whether the table requires authentication.
 ```python
 # tables/Customer/config.py
 ALLOWED_OPERATIONS = ["C", "R"]  # Only allow Create (POST) and Read (GET)
@@ -120,102 +133,91 @@ FILTER_FIELDS = {
     "price": ["gte", "lte", "exact"],
     "name": ["icontains", "exact"],
     "is_active": ["exact"],
-}  # Or simple list: ["name", "email"]
-SEARCH_FIELDS = ["name", "email"]
+}
+SEARCH_FIELDS = ["^name", "^email"]  # Prefix seek for optimal B-Tree index utilization
 ORDERING_FIELDS = ["created_at", "price"]
 ```
 
-### 2. Authentication & Scopes
-If `REQUIRE_AUTH = True`, clients must provide a token in the `Authorization` header. You can generate fine-grained access tokens directly from the CLI:
+### 2. Authentication & Scoped Access Tokens
+Generate restricted, fine-grained access tokens directly from the CLI:
 ```bash
-dataman users create-token MyFrontendService --scopes customer:read,customer:create
+dataman token create "Frontend Service" --scopes "customer:read,order:create"
 ```
-Use the token in your requests:
+Use the token with standard `Bearer` or `Token` headers:
 ```http
-Authorization: Token <your_generated_token_key>
+Authorization: Bearer <your_generated_token_key>
 ```
 
 ### 3. `validation.py` (Data Validation)
-Validate incoming JSON payloads before they are passed to the database. Raise `ValidationError` to immediately return a `400 Bad Request`.
+Validate incoming JSON payloads before database execution. Raise `ValidationError` to immediately return `400 Bad Request`.
 ```python
 # tables/Customer/validation.py
 from rest_framework.exceptions import ValidationError
 
 
-def validate(data):
+def validate_customer(data):
     if "admin" in data.get("name", "").lower():
         raise ValidationError({"name": "Reserved keyword used."})
-
-    # You can also mutate incoming data
     data["name"] = data["name"].strip().title()
     return data
 ```
 
-### 4. `service.py` (Pre/Post Hooks)
-Run business logic right before or after the database commits a transaction. Available hooks: `before_create`, `after_create`, `before_update`, `after_update`, `before_destroy`, `after_destroy`.
-
+### 4. `service.py` (Pre/Post Lifecycle Hooks)
+Run transactional business logic before or after database commits (`before_create`, `after_create`, `before_update`, `after_update`, `before_destroy`, `after_destroy`):
 ```python
-# tables/Customer/service.py
+# tables/Order/service.py
+from rest_framework.exceptions import ValidationError
+from tables.Product.models import Product
+
+
 def before_create(data):
-    # E.g., hash a password, trigger a background task, or enforce rules
-    if not data.get("email"):
-        raise ValueError("Email is strictly required")
-
-
-def after_create(instance):
-    # instance is the saved Django model object
-    print(f"Successfully created customer: {instance.name}")
+    product = Product.objects.get(id=data["product"])
+    quantity = int(data.get("quantity", 1))
+    if product.stock_quantity < quantity:
+        raise ValidationError({"quantity": "Insufficient inventory available."})
+    product.stock_quantity -= quantity
+    product.save()
+    return data
 ```
 
-### 5. Health Checks & Readiness Probes
-DataMan comes with built-in health check endpoints designed for cloud platforms, load balancers, and orchestrators (Kubernetes, AWS ECS, Docker):
-* `GET /health/live/` (or `/api/health/live/`): Liveness probe returning `200 OK` indicating the process is alive.
-* `GET /health/ready/` (or `/api/health/ready/`): Readiness probe validating active database connection integrity and unapplied migrations (returns `200 OK` or `503 Service Unavailable`).
-* `GET /health/` (or `/api/health/`): Unified health status with database latency metrics.
-
-### 6. Multi-Database Architecture
-Organize large projects with isolated physical databases:
-
-```text
-my_project/
-├── database.py
-├── config.py
-├── analytics_db/
-│   ├── events/
-│   │   ├── models.py
-│   │   └── config.py
-│   └── metrics/
-│       ├── models.py
-│       └── config.py
-└── core_db/
-    └── users/
-        ├── models.py
-        └── config.py
-```
-
-1. Create a database:
+### 5. Multi-Database Architecture
+Organize large projects across isolated physical databases:
 ```bash
+# 1. Create a database namespace
 dataman create database analytics_db
-```
-2. Scaffold a table bound to that database:
-```bash
+
+# 2. Scaffold a table bound to that database
 dataman create table events --database analytics_db
-```
-3. Run migrations across all databases (or target a single database):
-```bash
-dataman migrate
-# or
+
+# 3. Run migrations across all databases (or target a single database)
 dataman migrate --database analytics_db
 ```
 Endpoints are automatically registered at both `api/<table_name>/` and namespaced `api/<database_name>/<table_name>/`.
 
 ---
 
+## Production Health & Monitoring
+
+DataMan comes with built-in health check endpoints for Kubernetes, Docker, and AWS ECS:
+* `GET /health/live/`: Process liveness probe returning `200 OK`.
+* `GET /health/ready/`: Sanitized readiness probe validating database connectivity and migration synchronization (returns `200 OK` or `503 Service Unavailable`).
+* `GET /health/`: Unified health status with database latency metrics.
+
+---
+
+## ASGI Production Mode
+
+Start high-concurrency production server powered by Uvicorn:
+```bash
+dataman server start --asgi --host 0.0.0.0 --port 8000 --workers 4
+```
+
+---
+
 ## Testing
 
-DataMan is rigorously tested with **95%+ branch coverage**, verifying extreme edge cases, token validations, and dynamic hook executions.
+DataMan is tested with **95%+ branch coverage**, verifying authentication edge cases, multi-database routing, and dynamic lifecycle hooks.
 
-To run the test suite:
 ```bash
 uv run pytest tests/ -v
 ```

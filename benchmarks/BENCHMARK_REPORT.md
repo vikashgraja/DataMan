@@ -1,41 +1,42 @@
 # DataMan High-Performance Scale Benchmark Report
 
 **Generated**: September 17, 2026 - 21:35:08
+**Environment**: Windows 11 (AMD64) | 12 vCPUs | PostgreSQL 17
 **Database Engine**: PostgreSQL
 **Framework**: `dataman-engine` (ASGI / Uvicorn)
 **Scale Target**: 1,000,000 Records | 20 Concurrent Users | 10 Spawn Rate | 10s Duration
 
 ---
 
-## 🚀 1. Database & ORM Engine Scale Performance (1,000,000+ Records)
+## 1. Database & ORM Engine Scale Performance (1,000,000+ Records)
 
 Measures raw query execution and index lookup performance directly on the database engine.
 
 | Workload / Query Type | Query Scope | Average Latency | Performance Status |
 | :--- | :--- | :--- | :--- |
-| **Point Lookup (Indexed PK)** | 1 row | **0.727 ms** | ⚡ Sub-millisecond |
-| **Multi-Column Filter + Order** | 25 rows | **1.465 ms** | ⚡ High-Speed |
-| **FK Join (`select_related`)** | 50 rows | **2.638 ms** | ⚡ Optimized |
-| **Reverse Join (`prefetch_related`)** | 25 parents + children | **41.910 ms** | ⚡ Batch Joined |
-| **Scale Aggregation (AVG + COUNT)** | 1,000,000+ rows | **114.344 ms** | ⚡ Parallel Scan |
+| **Point Lookup (Indexed PK)** | 1 row | **0.727 ms** | Sub-millisecond |
+| **Multi-Column Filter + Order** | 25 rows | **1.465 ms** | High-Speed |
+| **FK Join (`select_related`)** | 50 rows | **2.638 ms** | Optimized |
+| **Reverse Join (`prefetch_related`)** | 25 parents + children | **41.910 ms** | Batch Joined |
+| **Scale Aggregation (AVG + COUNT)** | 1,000,000+ rows | **114.344 ms** | Parallel Scan |
 
 ---
 
-## 📊 2. High-Concurrency API Stress Test Summary
+## 2. High-Concurrency API Stress Test Summary
 
 | Metric | Measured Result | Benchmark Target | Status |
 | :--- | :--- | :--- | :--- |
-| **Database Engine** | **PostgreSQL** | PostgreSQL / SQLite | ⚡ Active |
-| **Bulk Data Ingestion** | **6,939,765 rows/sec** | > 10,000 rows/sec | ⚡ Passed |
-| **HTTP Success Rate** | **100.00%** (188/188) | > 99.0% | 🛡️ Flawless |
-| **Median API Latency** | **600 ms** | < 800 ms | ⚡ Passed |
-| **95th Percentile Latency** | **1700 ms** | < 2,000 ms | ⚡ Passed |
-| **Peak Throughput** | **20.44 req/sec** | > 15 req/sec (4 Workers) | ⚡ Passed |
+| **Database Engine** | **PostgreSQL** | PostgreSQL / SQLite | Active |
+| **In-Memory Record Generation** | **6,939,765 rows/sec** | > 10,000 rows/sec | Passed |
+| **HTTP Success Rate** | **100.00%** (188/188) | > 99.0% | Flawless |
+| **Median API Latency** | **600 ms** | < 800 ms | Passed |
+| **95th Percentile Latency** | **1700 ms** | < 2,000 ms | Passed |
+| **Peak Throughput** | **20.44 req/sec** | > 15 req/sec (4 Workers) | Passed |
 
 
 ---
 
-## 📈 3. Endpoint Latency & Throughput Breakdown
+## 3. Endpoint Latency & Throughput Breakdown
 
 | HTTP Method | Endpoint | Query Workload | Req/s | Median | Avg Latency | 95th % | Failure Rate |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -46,7 +47,7 @@ Measures raw query execution and index lookup performance directly on the databa
 
 ---
 
-## 🔍 Key Architectural Enhancements
+## Key Architectural Enhancements
 
 1. **Automatic Relation Pre-fetching (`select_related` / `prefetch_related`)**:
    - Eliminates N+1 query loops on nested foreign keys, reducing SQL roundtrips by 95%.
@@ -57,7 +58,7 @@ Measures raw query execution and index lookup performance directly on the databa
 
 ---
 
-## 🛠️ Reproduction Command
+## Reproduction Command
 ```bash
 uv run python benchmarks/run_benchmark.py --database-url postgres://postgres:postgres@localhost:5432/dataman_db --users 20 --spawn-rate 10 --run-time 10s --records 1000000
 ```

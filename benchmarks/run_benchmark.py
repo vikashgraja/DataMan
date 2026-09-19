@@ -134,7 +134,7 @@ def run_orm_scale_benchmark():
     for i in range(1, iterations + 1):
         _ = Customer.objects.get(id=(i % 1000) + 1)
     t_pk = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("Point Lookup (Indexed PK)", "1 row", f"{t_pk:.3f} ms", "⚡ Sub-millisecond"))
+    results.append(("Point Lookup (Indexed PK)", "1 row", f"{t_pk:.3f} ms", "Sub-millisecond"))
 
     # 2. Multi-Column Indexed Filter + Sort
     t0 = time.perf_counter()
@@ -142,7 +142,7 @@ def run_orm_scale_benchmark():
     for _ in range(iterations):
         _ = list(Order.objects.filter(status="completed", total_amount__gte=100.00).order_by("-created_at")[:25])
     t_filter = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("Multi-Column Filter + Order", "25 rows", f"{t_filter:.3f} ms", "⚡ High-Speed"))
+    results.append(("Multi-Column Filter + Order", "25 rows", f"{t_filter:.3f} ms", "High-Speed"))
 
     # 3. Foreign Key Join with select_related
     t0 = time.perf_counter()
@@ -150,7 +150,7 @@ def run_orm_scale_benchmark():
     for _ in range(iterations):
         _ = list(Order.objects.select_related("customer").filter(status="completed")[:50])
     t_fk = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("FK Join (`select_related`)", "50 rows", f"{t_fk:.3f} ms", "⚡ Optimized"))
+    results.append(("FK Join (`select_related`)", "50 rows", f"{t_fk:.3f} ms", "Optimized"))
 
     # 4. Reverse Join with prefetch_related
     t0 = time.perf_counter()
@@ -158,7 +158,7 @@ def run_orm_scale_benchmark():
     for _ in range(iterations):
         _ = list(Customer.objects.filter(id__lte=25).prefetch_related("orders"))
     t_prefetch = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("Reverse Join (`prefetch_related`)", "25 parents + children", f"{t_prefetch:.3f} ms", "⚡ Batch Joined"))
+    results.append(("Reverse Join (`prefetch_related`)", "25 parents + children", f"{t_prefetch:.3f} ms", "Batch Joined"))
 
     # 5. Full Scale Aggregation
     t0 = time.perf_counter()
@@ -166,7 +166,7 @@ def run_orm_scale_benchmark():
     for _ in range(iterations):
         _ = Order.objects.filter(status="completed").aggregate(Avg("total_amount"), Count("id"))
     t_agg = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("Scale Aggregation (AVG + COUNT)", "1,000,000+ rows", f"{t_agg:.3f} ms", "⚡ Parallel Scan"))
+    results.append(("Scale Aggregation (AVG + COUNT)", "1,000,000+ rows", f"{t_agg:.3f} ms", "Parallel Scan"))
 
     return results
 
@@ -215,20 +215,26 @@ def generate_markdown_report(csv_prefix, args, db_engine_name, seed_rate, orm_me
 
     med_target = 800
     p95_target = 2000
-    med_status = "⚡ Passed" if med_latency <= med_target else "⚠️ Elevated"
-    p95_status = "⚡ Passed" if p95_latency <= p95_target else "⚠️ Elevated"
-    throughput_status = "⚡ Passed" if reqs_per_sec >= 15 else "⚡ Active"
+    med_status = "Passed" if med_latency <= med_target else "Elevated"
+    p95_status = "Passed" if p95_latency <= p95_target else "Elevated"
+    throughput_status = "Passed" if reqs_per_sec >= 15 else "Active"
     timestamp = datetime.datetime.now().strftime("%B %d, %Y - %H:%M:%S")
+    import platform
+
+    cpu_cores = os.cpu_count() or "Multi-Core"
+    system_spec = f"{platform.system()} {platform.release()} ({platform.machine()}) | {cpu_cores} vCPUs"
+
     report_content = f"""# DataMan High-Performance Scale Benchmark Report
 
 **Generated**: {timestamp}
+**Environment**: {system_spec}
 **Database Engine**: {db_engine_name}
 **Framework**: `dataman-engine` (ASGI / Uvicorn)
 **Scale Target**: {args.records:,} Records | {args.users:,} Concurrent Users | {args.spawn_rate} Spawn Rate | {args.run_time} Duration
 
 ---
 
-## 🚀 1. Database & ORM Engine Scale Performance (1,000,000+ Records)
+## 1. Database & ORM Engine Scale Performance (1,000,000+ Records)
 
 Measures raw query execution and index lookup performance directly on the database engine.
 
@@ -242,13 +248,13 @@ Measures raw query execution and index lookup performance directly on the databa
     report_content += f"""
 ---
 
-## 📊 2. High-Concurrency API Stress Test Summary
+## 2. High-Concurrency API Stress Test Summary
 
 | Metric | Measured Result | Benchmark Target | Status |
 | :--- | :--- | :--- | :--- |
-| **Database Engine** | **{db_engine_name}** | PostgreSQL / SQLite | ⚡ Active |
-| **Bulk Data Ingestion** | **{seed_rate:,.0f} rows/sec** | > 10,000 rows/sec | ⚡ Passed |
-| **HTTP Success Rate** | **{read_success_rate:.2f}%** ({total_reqs - fail_count:,}/{total_reqs:,}) | > 99.0% | {'🛡️ Flawless' if read_success_rate >= 99 else '⚠️ Load Contention'} |
+| **Database Engine** | **{db_engine_name}** | PostgreSQL / SQLite | Active |
+| **In-Memory Record Generation** | **{seed_rate:,.0f} rows/sec** | > 10,000 rows/sec | Passed |
+| **HTTP Success Rate** | **{read_success_rate:.2f}%** ({total_reqs - fail_count:,}/{total_reqs:,}) | > 99.0% | {'Flawless' if read_success_rate >= 99 else 'Load Contention'} |
 | **Median API Latency** | **{med_latency:.0f} ms** | < {med_target} ms | {med_status} |
 | **95th Percentile Latency** | **{p95_latency:.0f} ms** | < {p95_target:,} ms | {p95_status} |
 | **Peak Throughput** | **{reqs_per_sec:.2f} req/sec** | > 15 req/sec (4 Workers) | {throughput_status} |
@@ -256,7 +262,7 @@ Measures raw query execution and index lookup performance directly on the databa
 
 ---
 
-## 📈 3. Endpoint Latency & Throughput Breakdown
+## 3. Endpoint Latency & Throughput Breakdown
 
 | HTTP Method | Endpoint | Query Workload | Req/s | Median | Avg Latency | 95th % | Failure Rate |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -278,7 +284,7 @@ Measures raw query execution and index lookup performance directly on the databa
     report_content += f"""
 ---
 
-## 🔍 Key Architectural Enhancements
+## Key Architectural Enhancements
 
 1. **Automatic Relation Pre-fetching (`select_related` / `prefetch_related`)**:
    - Eliminates N+1 query loops on nested foreign keys, reducing SQL roundtrips by 95%.
@@ -289,7 +295,7 @@ Measures raw query execution and index lookup performance directly on the databa
 
 ---
 
-## 🛠️ Reproduction Command
+## Reproduction Command
 ```bash
 uv run python benchmarks/run_benchmark.py --database-url {args.database_url or "sqlite:///db.sqlite3"} --users {args.users} --spawn-rate {args.spawn_rate} --run-time {args.run_time} --records {args.records}
 ```
