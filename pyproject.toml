@@ -1,6 +1,6 @@
 [project]
 name = "dataman-engine"
-version = "0.2.0"
+version = "0.3.0"
 description = "A dynamic, headless data layer framework built on Django and DRF for instant CRUD APIs and custom business logic."
 readme = "README.md"
 license = "MIT"
