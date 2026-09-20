@@ -7,6 +7,22 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version increment type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      custom_version:
+        description: "Explicit version (used if increment type is 'custom', e.g. 0.3.0)"
+        required: false
+        default: ""
+        type: string
 
 jobs:
   pypi-publish:
@@ -14,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: read
+      contents: write
 
     environment:
       name: main
@@ -23,6 +39,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -33,6 +52,80 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version-file: ".python-version"
+
+      - name: Bump Version
+        if: github.event_name == 'workflow_dispatch'
+        id: bump
+        run: |
+          python - << 'EOF'
+          import os, re, sys
+
+          bump_type = "${{ github.event.inputs.bump_type }}"
+          custom_ver = "${{ github.event.inputs.custom_version }}".strip()
+
+          with open("pyproject.toml", "r", encoding="utf-8") as f:
+              content = f.read()
+
+          match = re.search(r'^version\s*=\s*"(.*?)"', content, re.MULTILINE)
+          if not match:
+              sys.exit("Error: version field not found in pyproject.toml")
+
+          current_version = match.group(1)
+
+          if custom_ver:
+              new_version = custom_ver.lstrip("v")
+          else:
+              parts = [int(p) for p in current_version.split(".")[:3]]
+              while len(parts) < 3:
+                  parts.append(0)
+              if bump_type == "major":
+                  new_version = f"{parts[0]+1}.0.0"
+              elif bump_type == "minor":
+                  new_version = f"{parts[0]}.{parts[1]+1}.0"
+              else:  # patch
+                  new_version = f"{parts[0]}.{parts[1]}.{parts[2]+1}"
+
+          # Update pyproject.toml
+          new_content = re.sub(
+              r'^version\s*=\s*".*?"',
+              f'version = "{new_version}"',
+              content,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          with open("pyproject.toml", "w", encoding="utf-8") as f:
+              f.write(new_content)
+
+          # Update src/dataman/__init__.py
+          with open("src/dataman/__init__.py", "r", encoding="utf-8") as f:
+              init_content = f.read()
+
+          new_init = re.sub(
+              r'^__version__\s*=\s*".*?"',
+              f'__version__ = "{new_version}"',
+              init_content,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          with open("src/dataman/__init__.py", "w", encoding="utf-8") as f:
+              f.write(new_init)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"version={new_version}\n")
+
+          print(f"Bumped version from {current_version} to {new_version}")
+          EOF
+
+      - name: Update Lockfile and Commit Version Bump
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          uv lock
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml src/dataman/__init__.py uv.lock
+          git commit -m "chore(release): bump version to v${{ steps.bump.outputs.version }} [skip ci]"
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push origin main --tags
 
       - name: Build distribution artifacts
         run: uv build
