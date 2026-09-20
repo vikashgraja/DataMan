@@ -5,9 +5,9 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
-import urllib.request
 import urllib.error
+import urllib.request
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SANDBOX_DIR = PROJECT_ROOT / "benchmarks" / "sandbox"
@@ -34,7 +34,6 @@ def ensure_benchmark_schema(sandbox_dir: Path, database_url: str = ""):
 
     env_path = sandbox_dir / ".env"
     database_file = sandbox_dir / "database.py"
-    config_file = sandbox_dir / "config.py"
     tables_dir = sandbox_dir / "tables"
     customer_dir = tables_dir / "Customer"
     order_dir = tables_dir / "Order"
@@ -43,12 +42,16 @@ def ensure_benchmark_schema(sandbox_dir: Path, database_url: str = ""):
     # 1. Initialize project if not already initialized
     if not env_path.exists() or not database_file.exists():
         from click.testing import CliRunner
+
         from dataman.cli import cli
+
         runner = CliRunner()
         runner.invoke(cli, ["init"])
 
     # 2. Configure .env and database URL
-    db_conn_str = database_url or os.getenv("DATABASE_URL", f"sqlite:///{sandbox_dir}/db.sqlite3")
+    db_conn_str = database_url or os.getenv(
+        "DATABASE_URL", f"sqlite:///{sandbox_dir}/db.sqlite3"
+    )
     env_content = (
         f"DATAMAN_SECRET_KEY='benchmark-secret-key-high-entropy'\n"
         f"DEBUG=False\n"
@@ -123,6 +126,7 @@ def run_orm_scale_benchmark():
     """
     from django.apps import apps
     from django.db.models import Avg, Count
+
     Customer = apps.get_model("tables", "Customer")
     Order = apps.get_model("tables", "Order")
 
@@ -134,23 +138,35 @@ def run_orm_scale_benchmark():
     for i in range(1, iterations + 1):
         _ = Customer.objects.get(id=(i % 1000) + 1)
     t_pk = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("Point Lookup (Indexed PK)", "1 row", f"{t_pk:.3f} ms", "Sub-millisecond"))
+    results.append(
+        ("Point Lookup (Indexed PK)", "1 row", f"{t_pk:.3f} ms", "Sub-millisecond")
+    )
 
     # 2. Multi-Column Indexed Filter + Sort
     t0 = time.perf_counter()
     iterations = 100
     for _ in range(iterations):
-        _ = list(Order.objects.filter(status="completed", total_amount__gte=100.00).order_by("-created_at")[:25])
+        _ = list(
+            Order.objects.filter(status="completed", total_amount__gte=100.00).order_by(
+                "-created_at"
+            )[:25]
+        )
     t_filter = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("Multi-Column Filter + Order", "25 rows", f"{t_filter:.3f} ms", "High-Speed"))
+    results.append(
+        ("Multi-Column Filter + Order", "25 rows", f"{t_filter:.3f} ms", "High-Speed")
+    )
 
     # 3. Foreign Key Join with select_related
     t0 = time.perf_counter()
     iterations = 50
     for _ in range(iterations):
-        _ = list(Order.objects.select_related("customer").filter(status="completed")[:50])
+        _ = list(
+            Order.objects.select_related("customer").filter(status="completed")[:50]
+        )
     t_fk = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("FK Join (`select_related`)", "50 rows", f"{t_fk:.3f} ms", "Optimized"))
+    results.append(
+        ("FK Join (`select_related`)", "50 rows", f"{t_fk:.3f} ms", "Optimized")
+    )
 
     # 4. Reverse Join with prefetch_related
     t0 = time.perf_counter()
@@ -158,15 +174,31 @@ def run_orm_scale_benchmark():
     for _ in range(iterations):
         _ = list(Customer.objects.filter(id__lte=25).prefetch_related("orders"))
     t_prefetch = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("Reverse Join (`prefetch_related`)", "25 parents + children", f"{t_prefetch:.3f} ms", "Batch Joined"))
+    results.append(
+        (
+            "Reverse Join (`prefetch_related`)",
+            "25 parents + children",
+            f"{t_prefetch:.3f} ms",
+            "Batch Joined",
+        )
+    )
 
     # 5. Full Scale Aggregation
     t0 = time.perf_counter()
     iterations = 10
     for _ in range(iterations):
-        _ = Order.objects.filter(status="completed").aggregate(Avg("total_amount"), Count("id"))
+        _ = Order.objects.filter(status="completed").aggregate(
+            Avg("total_amount"), Count("id")
+        )
     t_agg = ((time.perf_counter() - t0) / iterations) * 1000
-    results.append(("Scale Aggregation (AVG + COUNT)", "1,000,000+ rows", f"{t_agg:.3f} ms", "Parallel Scan"))
+    results.append(
+        (
+            "Scale Aggregation (AVG + COUNT)",
+            "1,000,000+ rows",
+            f"{t_agg:.3f} ms",
+            "Parallel Scan",
+        )
+    )
 
     return results
 
@@ -188,7 +220,7 @@ def generate_markdown_report(csv_prefix, args, db_engine_name, seed_rate, orm_me
     stats_file = Path(f"{csv_prefix}_stats.csv")
     rows = []
     if stats_file.exists():
-        with open(stats_file, mode="r", encoding="utf-8") as f:
+        with open(stats_file, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 rows.append(row)
@@ -254,7 +286,7 @@ Measures raw query execution and index lookup performance directly on the databa
 | :--- | :--- | :--- | :--- |
 | **Database Engine** | **{db_engine_name}** | PostgreSQL / SQLite | Active |
 | **In-Memory Record Generation** | **{seed_rate:,.0f} rows/sec** | > 10,000 rows/sec | Passed |
-| **HTTP Success Rate** | **{read_success_rate:.2f}%** ({total_reqs - fail_count:,}/{total_reqs:,}) | > 99.0% | {'Flawless' if read_success_rate >= 99 else 'Load Contention'} |
+| **HTTP Success Rate** | **{read_success_rate:.2f}%** ({total_reqs - fail_count:,}/{total_reqs:,}) | > 99.0% | {"Flawless" if read_success_rate >= 99 else "Load Contention"} |
 | **Median API Latency** | **{med_latency:.0f} ms** | < {med_target} ms | {med_status} |
 | **95th Percentile Latency** | **{p95_latency:.0f} ms** | < {p95_target:,} ms | {p95_status} |
 | **Peak Throughput** | **{reqs_per_sec:.2f} req/sec** | > 15 req/sec (4 Workers) | {throughput_status} |
@@ -306,11 +338,11 @@ uv run python benchmarks/run_benchmark.py --database-url {args.database_url or "
     print(f"\n[+] Benchmark Report successfully auto-generated: {report_path}")
 
     # Clean up temp CSV files
+    import contextlib
+
     for p in Path(PROJECT_ROOT / "benchmarks").glob(f"{Path(csv_prefix).name}*.csv"):
-        try:
+        with contextlib.suppress(Exception):
             p.unlink()
-        except Exception:
-            pass
 
 
 def run():
@@ -345,7 +377,10 @@ def run():
         help="PostgreSQL connection string (e.g. postgres://user:pass@localhost:5432/db)",
     )
     parser.add_argument(
-        "--host", type=str, default="http://127.0.0.1:8000", help="Target DataMan host"
+        "--host",
+        type=str,
+        default="",
+        help="Target DataMan host (default: auto-launch ephemeral port)",
     )
     args = parser.parse_args()
 
@@ -353,28 +388,38 @@ def run():
         os.environ["DATABASE_URL"] = args.database_url
 
     db_url = os.environ.get("DATABASE_URL", "")
-    db_engine_name = "PostgreSQL" if db_url.startswith(("postgres://", "postgresql://")) else "SQLite (WAL Mode)"
+    db_engine_name = (
+        "PostgreSQL"
+        if db_url.startswith(("postgres://", "postgresql://"))
+        else "SQLite (WAL Mode)"
+    )
 
     print("\n=================================================================")
     print(f"DATAMAN 1M SCALE & CONCURRENCY BENCHMARK ({db_engine_name})")
     print("=================================================================")
 
     # 1. Ensure Schema inside isolated Sandbox project
-    print("[1/5] Initializing isolated DataMan project and tables in benchmarks/sandbox/...")
+    print(
+        "[1/5] Initializing isolated DataMan project and tables in benchmarks/sandbox/..."
+    )
     ensure_benchmark_schema(SANDBOX_DIR, database_url=args.database_url)
 
     # 2. Setup Django & Run Migrations inside sandbox
     print(f"[2/5] Initializing {db_engine_name} & running migrations in sandbox...")
     from dataman import django_setup
+
     django_setup.setup()
 
     from django.core.management import call_command
+
     try:
         call_command("makemigrations", "tables")
         call_command("migrate")
     except Exception as e:
         print(f"\n[-] Database connection failed on {db_engine_name}: {e}")
-        print(f"[*] Verify PostgreSQL service is started or check credentials in --database-url.")
+        print(
+            "[*] Verify PostgreSQL service is started or check credentials in --database-url."
+        )
         sys.exit(1)
 
     # 3. Seed data up to 1M records
@@ -390,17 +435,28 @@ def run():
     seed_rate = (args.records / seed_duration) if seed_duration > 0 else 0
 
     # 4. Run Direct Database & ORM Query Benchmark
-    print(f"\n[4/5] Executing Database Query & Index Seek Latency Benchmark...")
+    print("\n[4/5] Executing Database Query & Index Seek Latency Benchmark...")
     orm_metrics = run_orm_scale_benchmark()
     for name, scope, lat, status_str in orm_metrics:
         print(f"  -> {name} ({scope}): {lat} [{status_str}]")
 
-    # 5. Check if server running or start uvicorn in sandbox directory
+    # 5. Start dedicated ASGI uvicorn server for benchmark
     server_proc = None
-    if not wait_for_server(f"{args.host}/health/", timeout=1):
-        print(f"\n[5/5] Starting high-performance ASGI server on {args.host} from sandbox...")
+    target_host = args.host
+    if not target_host:
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            port = s.getsockname()[1]
+        target_host = f"http://127.0.0.1:{port}"
+        print(
+            f"\n[5/5] Starting high-performance ASGI server on {target_host} from sandbox..."
+        )
         server_env = os.environ.copy()
-        server_env["PYTHONPATH"] = f"{PROJECT_ROOT / 'src'}{os.pathsep}{SANDBOX_DIR}{os.pathsep}{PROJECT_ROOT}"
+        server_env["PYTHONPATH"] = (
+            f"{PROJECT_ROOT / 'src'}{os.pathsep}{SANDBOX_DIR}{os.pathsep}{PROJECT_ROOT}"
+        )
         if args.database_url:
             server_env["DATABASE_URL"] = args.database_url
 
@@ -412,7 +468,7 @@ def run():
             "--host",
             "127.0.0.1",
             "--port",
-            "8000",
+            str(port),
             "--workers",
             "4",
             "--log-level",
@@ -421,17 +477,19 @@ def run():
             "3",
         ]
         server_proc = subprocess.Popen(server_cmd, cwd=str(SANDBOX_DIR), env=server_env)
-        if not wait_for_server(f"{args.host}/health/", timeout=15):
+        if not wait_for_server(f"{target_host}/health/", timeout=15):
             print("[-] Server failed to start in time.")
             if server_proc:
                 server_proc.terminate()
             sys.exit(1)
         print(f"[+] ASGI server ready with 4 workers on {db_engine_name}!")
     else:
-        print(f"[+] Using existing server at {args.host}")
+        print(f"[+] Using specified server at {target_host}")
 
     # 6. Run Locust Load Test
-    print(f"[*] Blasting {args.users:,} concurrent users for {args.run_time} on {db_engine_name}...")
+    print(
+        f"[*] Blasting {args.users:,} concurrent users for {args.run_time} on {db_engine_name}..."
+    )
     benchmarks_dir = PROJECT_ROOT / "benchmarks"
     locustfile_path = benchmarks_dir / "locustfile.py"
     csv_prefix = str(benchmarks_dir / "locust_output")
@@ -443,7 +501,7 @@ def run():
         "-f",
         str(locustfile_path),
         "--host",
-        args.host,
+        target_host,
         "--users",
         str(args.users),
         "--spawn-rate",
