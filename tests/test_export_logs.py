@@ -1,3 +1,4 @@
+import contextlib
 import json
 import subprocess
 import sys
@@ -10,7 +11,7 @@ from dataman.cli import cli
 
 def test_log_export_api_and_cli(tmp_path):
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         # Allow host testserver

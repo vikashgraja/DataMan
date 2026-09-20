@@ -1,3 +1,4 @@
+import contextlib
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -7,7 +8,7 @@ from dataman.cli import cli
 
 def test_auth_scaffold_and_token_creation(tmp_path):
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         # Test 1: Scaffold with auth

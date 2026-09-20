@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +14,7 @@ def test_advanced_dictionary_filters_search_and_ordering(tmp_path):
     (gte, lte, icontains, exact) alongside SEARCH_FIELDS and ORDERING_FIELDS.
     """
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         env_path = Path(".env")

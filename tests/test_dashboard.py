@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -9,7 +10,7 @@ from dataman.cli import cli
 
 def test_dashboard_and_analytics(tmp_path):
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         # Create a table for generating traffic

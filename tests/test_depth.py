@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +14,7 @@ def test_depth_nested_relationships(tmp_path):
     for foreign key relationships on read while preserving write functionality.
     """
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         env_path = Path(".env")

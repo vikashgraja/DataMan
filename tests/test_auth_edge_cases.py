@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -16,7 +17,7 @@ def test_auth_edge_cases(tmp_path):
     - Valid token but insufficient scopes
     """
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
         runner.invoke(cli, ["create", "table", "Order", "-o", "crud"])
 
@@ -123,7 +124,7 @@ print("SUCCESS")
 def test_admin_change_password_api(tmp_path):
     """Test frontend admin change password API endpoint."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         script = """

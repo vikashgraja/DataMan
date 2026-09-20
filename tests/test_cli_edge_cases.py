@@ -1,3 +1,5 @@
+import contextlib
+
 from click.testing import CliRunner
 
 from dataman.cli import cli
@@ -6,7 +8,7 @@ from dataman.cli import cli
 def test_cli_without_init(tmp_path):
     """Test running commands before dataman init is called."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         # makemigration without init
         result = runner.invoke(cli, ["makemigration"])
         assert result.exit_code != 0
@@ -24,7 +26,7 @@ def test_cli_without_init(tmp_path):
 def test_create_table_invalid_names(tmp_path):
     """Test create table with invalid python identifiers."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         # Invalid python identifiers
@@ -40,7 +42,7 @@ def test_create_table_invalid_names(tmp_path):
 def test_create_table_existing(tmp_path):
     """Test create table when it already exists."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
         runner.invoke(cli, ["create", "table", "User"])
 

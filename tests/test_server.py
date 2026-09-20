@@ -1,3 +1,4 @@
+import contextlib
 from unittest import mock
 
 from click.testing import CliRunner
@@ -8,7 +9,7 @@ from dataman.cli import cli
 def test_server_start_command(tmp_path):
     """Test that dataman server start runs without errors."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         # 1. Initialize project
         runner.invoke(cli, ["init"])
 

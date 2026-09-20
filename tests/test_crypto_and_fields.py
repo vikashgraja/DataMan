@@ -87,10 +87,12 @@ def test_get_and_reset_crypto_provider():
 
 
 def test_encrypted_django_model_fields(tmp_path):
+    import contextlib
+
     from dataman.cli import cli
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         res = runner.invoke(cli, ["init"])
         assert res.exit_code == 0
 

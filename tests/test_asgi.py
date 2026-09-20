@@ -1,3 +1,4 @@
+import contextlib
 from unittest import mock
 
 from click.testing import CliRunner
@@ -8,7 +9,7 @@ from dataman.cli import cli
 def test_asgi_application_creation(tmp_path):
     """Test that get_asgi_application initializes DataMan and returns ASGI callable."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         from dataman import django_setup
@@ -23,7 +24,7 @@ def test_asgi_application_creation(tmp_path):
 def test_server_start_asgi_command(tmp_path):
     """Test dataman server start with --asgi and custom port/host/workers."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         mock_uvicorn = mock.MagicMock()
@@ -57,7 +58,7 @@ def test_server_start_asgi_command(tmp_path):
 def test_server_start_custom_host_port(tmp_path):
     """Test dataman server start with custom host and port."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         with mock.patch("dataman.cli.call_command") as mock_call_command:

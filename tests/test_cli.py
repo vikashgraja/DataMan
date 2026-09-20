@@ -1,3 +1,4 @@
+import contextlib
 import os
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from dataman.cli import cli
 def test_init_command(tmp_path):
     """Test that the init command creates necessary files."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         result = runner.invoke(cli, ["init"])
         assert result.exit_code == 0
         assert "DataMan project initialized successfully" in result.output
@@ -28,7 +29,7 @@ def test_init_command(tmp_path):
 def test_create_table_command(tmp_path):
     """Test that dataman create table scaffolds the folder structure."""
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         # Must fail if tables/ doesn't exist
         result_fail = runner.invoke(cli, ["create", "table", "TestTable"])
         assert result_fail.exit_code != 0

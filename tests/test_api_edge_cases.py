@@ -71,12 +71,14 @@ assert response.status_code == 405
 print("All edge case API tests passed!")
 """
 
+    import contextlib
+
     from click.testing import CliRunner
 
     from dataman.cli import cli
 
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
         runner.invoke(cli, ["create", "table", "Article", "-o", "crud"])
         runner.invoke(cli, ["makemigration"])

@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -9,7 +10,7 @@ from dataman.cli import cli
 
 def test_init_scaffolding_database_and_config(tmp_path):
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         result = runner.invoke(cli, ["init"])
         assert result.exit_code == 0
         assert "Created .env file." in result.output
@@ -38,7 +39,7 @@ def test_init_scaffolding_database_and_config(tmp_path):
 
 def test_custom_database_and_config_loading(tmp_path):
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path):
+    with contextlib.chdir(tmp_path):
         runner.invoke(cli, ["init"])
 
         # Customize database.py
