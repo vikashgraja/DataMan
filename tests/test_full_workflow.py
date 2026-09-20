@@ -323,31 +323,31 @@ assert 'inventory' in r_ready.data['checks']['databases']
 client.credentials(HTTP_AUTHORIZATION='Token {token_key}')
 
 # 2. Test Customer Validation (banned email rejected)
-r_bad = client.post('/api/customer/', {{'name': 'alice smith', 'email': 'alice@banned.com', 'balance': 50}}, format='json')
+r_bad = client.post('/api/default/customer/', {{'name': 'alice smith', 'email': 'alice@banned.com', 'balance': 50}}, format='json')
 assert r_bad.status_code == 400, f"Validation failure expected, got {{r_bad.status_code}}"
 assert 'Domain @banned.com is rejected.' in str(r_bad.data)
 
 # 3. Test Customer Creation + Hook ($10 bonus applied + name titlecased)
-r_cust = client.post('/api/customer/', {{'name': 'alice smith', 'email': 'alice@example.com', 'balance': 50}}, format='json')
+r_cust = client.post('/api/default/customer/', {{'name': 'alice smith', 'email': 'alice@example.com', 'balance': 50}}, format='json')
 assert r_cust.status_code == 201, f"Customer create failed: {{r_cust.data}}"
 assert r_cust.data['name'] == 'Alice Smith'
 assert float(r_cust.data['balance']) == 60.00  # 50 + 10 welcome bonus
 
-# 4. Test Analytics Event (both /api/analytics/event/ and /api/event/)
+# 4. Test Analytics Event (/api/analytics/event/)
 r_evt = client.post('/api/analytics/event/', {{'event_type': 'page_view', 'payload': {{'path': '/home'}}}}, format='json')
 assert r_evt.status_code == 201, f"Event create failed: {{r_evt.data}}"
 assert r_evt.data['event_type'] == 'page_view'
 
-r_evt_list = client.get('/api/event/')
+r_evt_list = client.get('/api/analytics/event/')
 assert r_evt_list.status_code == 200
 assert len(r_evt_list.data['results']) == 1
 
-# 5. Test Inventory Product (both /api/inventory/product/ and /api/product/)
+# 5. Test Inventory Product (/api/inventory/product/)
 r_prod = client.post('/api/inventory/product/', {{'sku': 'SKU-100', 'title': 'Mechanical Keyboard', 'stock': 25}}, format='json')
 assert r_prod.status_code == 201, f"Product create failed: {{r_prod.data}}"
 assert r_prod.data['sku'] == 'SKU-100'
 
-r_prod_list = client.get('/api/product/')
+r_prod_list = client.get('/api/inventory/product/')
 assert r_prod_list.status_code == 200
 assert len(r_prod_list.data['results']) == 1
 
@@ -359,14 +359,14 @@ db_client.credentials(HTTP_AUTHORIZATION='Token {db_token_key}')
 r_db_evt = db_client.post('/api/analytics/event/', {{'event_type': 'click', 'payload': {{'btn': 'submit'}}}}, format='json')
 assert r_db_evt.status_code == 201, f"DB-level token should allow analytics POST: {{r_db_evt.data}}"
 
-r_db_evt_get = db_client.get('/api/event/')
+r_db_evt_get = db_client.get('/api/analytics/event/')
 assert r_db_evt_get.status_code == 200
 
 # Denied on customer (default db) and product (inventory db)
-r_db_denied1 = db_client.post('/api/customer/', {{'name': 'bob', 'email': 'bob@example.com'}}, format='json')
+r_db_denied1 = db_client.post('/api/default/customer/', {{'name': 'bob', 'email': 'bob@example.com'}}, format='json')
 assert r_db_denied1.status_code == 403, f"DB-level token should deny customer table: {{r_db_denied1.status_code}}"
 
-r_db_denied2 = db_client.post('/api/product/', {{'sku': 'SKU-999', 'title': 'Mouse'}}, format='json')
+r_db_denied2 = db_client.post('/api/inventory/product/', {{'sku': 'SKU-999', 'title': 'Mouse'}}, format='json')
 assert r_db_denied2.status_code == 403, f"DB-level token should deny inventory table: {{r_db_denied2.status_code}}"
 
 print("ALL_REALWORLD_TESTS_PASSED")

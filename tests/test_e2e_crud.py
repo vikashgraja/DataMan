@@ -74,12 +74,12 @@ from rest_framework.test import APIClient
 client = APIClient()
 
 # A. Create a Category
-resp = client.post("/api/category/", {"name": "Electronics"}, format="json")
+resp = client.post("/api/default/category/", {"name": "Electronics"}, format="json")
 assert resp.status_code == 201
 cat_id = resp.data["id"]
 
 # B. Create a Product linked to Category
-resp = client.post("/api/product/", {
+resp = client.post("/api/default/product/", {
     "name": "Laptop",
     "price": 1000,
     "in_stock": True,
@@ -94,27 +94,27 @@ assert resp.data["category"] == cat_id
 assert "created_at" in resp.data
 
 # C. Update the Product (PATCH)
-resp = client.patch(f"/api/product/{prod_id}/", {"price": 1200}, format="json")
+resp = client.patch(f"/api/default/product/{prod_id}/", {"price": 1200}, format="json")
 assert resp.status_code == 200
 assert resp.data["price"] == 1200
 assert resp.data["name"] == "Laptop"
 
 # D. Read the Product (GET Detail)
-resp = client.get(f"/api/product/{prod_id}/")
+resp = client.get(f"/api/default/product/{prod_id}/")
 assert resp.status_code == 200
 assert resp.data["price"] == 1200
 
 # E. Read the List with Pagination (GET List)
 # We will create 150 products to test pagination (PAGE_SIZE=100)
 for i in range(150):
-    client.post("/api/product/", {
+    client.post("/api/default/product/", {
         "name": f"Phone {i}",
         "price": 500,
         "in_stock": False,
         "category": cat_id
     }, format="json")
 
-resp = client.get("/api/product/")
+resp = client.get("/api/default/product/")
 assert resp.status_code == 200
 # Pagination should return 'count', 'next', 'previous', 'results'
 assert "count" in resp.data
@@ -124,11 +124,11 @@ assert resp.data["next"] is not None
 assert resp.data["previous"] is None
 
 # F. Delete the Category (Should cascade delete all products)
-resp = client.delete(f"/api/category/{cat_id}/")
+resp = client.delete(f"/api/default/category/{cat_id}/")
 assert resp.status_code == 204
 
 # Verify products are deleted
-resp = client.get("/api/product/")
+resp = client.get("/api/default/product/")
 assert resp.data["count"] == 0
 
 print("SUCCESS")

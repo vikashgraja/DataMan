@@ -39,8 +39,9 @@ from dataman.core import urls
 
 # Verify Healthy is registered
 prefixes = [r[0] for r in urls.router.registry]
-assert "api/healthy" in prefixes, f"Expected api/healthy in registry, got {prefixes}"
-assert "api/broken" not in prefixes
+assert "api/default/healthy" in prefixes, f"Expected api/default/healthy in registry, got {prefixes}"
+assert "api/healthy" not in prefixes
+assert "api/default/broken" not in prefixes
 
 print("PASS: Per-table route loader isolation successfully protected healthy endpoints.")
 """
@@ -98,7 +99,7 @@ telemetry_logger.addHandler(handler)
 telemetry_logger.setLevel(logging.INFO)
 
 client = APIClient()
-res = client.get("/api/metricitem/")
+res = client.get("/api/default/metricitem/")
 assert res.status_code == 200
 
 handler.flush()
@@ -106,7 +107,7 @@ log_output = stream.getvalue()
 
 # Verify stdout JSON log occurred
 assert "api_request" in log_output, f"Expected api_request JSON log in stdout, got: {log_output}"
-assert "/api/metricitem/" in log_output
+assert "/api/default/metricitem/" in log_output
 
 # Verify APILog database table was NOT written to
 assert APILog.objects.count() == 0, f"Expected 0 APILog rows under stdout backend, got {APILog.objects.count()}"
@@ -179,7 +180,7 @@ from rest_framework.test import APIClient
 client = APIClient()
 
 # Create an order
-res = client.post("/api/order/", {"item_name": "Widget A", "amount": "49.99"}, format="json")
+res = client.post("/api/default/order/", {"item_name": "Widget A", "amount": "49.99"}, format="json")
 assert res.status_code == 201, f"Expected 201, got {res.status_code}: {res.content}"
 
 log_file = Path("webhook_events.jsonl")

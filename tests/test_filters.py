@@ -79,7 +79,7 @@ products = [
 ]
 
 for p in products:
-    r = client.post("/api/product/", p, format="json")
+    r = client.post("/api/default/product/", p, format="json")
     assert r.status_code == 201, f"Failed to create {p['name']}"
 
 def get_results(response):
@@ -89,31 +89,31 @@ def get_results(response):
     return response.data
 
 # Query 1: Range filter using price__gte and price__lte
-r1 = client.get("/api/product/?price__gte=1000&price__lte=2000")
+r1 = client.get("/api/default/product/?price__gte=1000&price__lte=2000")
 res1 = get_results(r1)
 names1 = [x["name"] for x in res1]
 assert set(names1) == {"MacBook Air", "Dell XPS 15"}, f"Unexpected range results: {names1}"
 
 # Query 2: Substring case-insensitive filter name__icontains
-r2 = client.get("/api/product/?name__icontains=macbook")
+r2 = client.get("/api/default/product/?name__icontains=macbook")
 res2 = get_results(r2)
 names2 = [x["name"] for x in res2]
 assert set(names2) == {"MacBook Pro", "MacBook Air"}, f"Unexpected icontains results: {names2}"
 
 # Query 3: Combined filters (name__icontains + in_stock)
-r3 = client.get("/api/product/?price__gte=1000&in_stock=true")
+r3 = client.get("/api/default/product/?price__gte=1000&in_stock=true")
 res3 = get_results(r3)
 names3 = [x["name"] for x in res3]
 assert set(names3) == {"MacBook Pro", "MacBook Air"}, f"Expected in-stock high-end laptops: {names3}"
 
 # Query 4: Search across multiple fields
-r4 = client.get("/api/product/?search=developer")
+r4 = client.get("/api/default/product/?search=developer")
 res4 = get_results(r4)
 assert len(res4) == 1
 assert res4[0]["name"] == "Dell XPS 15"
 
 # Query 5: Ordering by price descending
-r5 = client.get("/api/product/?ordering=-price")
+r5 = client.get("/api/default/product/?ordering=-price")
 res5 = get_results(r5)
 prices = [x["price"] for x in res5]
 assert prices == [2500, 1800, 1100, 120, 20], f"Unexpected ordering: {prices}"

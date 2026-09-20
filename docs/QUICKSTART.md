@@ -123,15 +123,15 @@ dataman migrate
 dataman server start
 ```
 
-Your API is now live at **`http://127.0.0.1:8000/api/`**!
+Your API is now live at **`http://127.0.0.1:8000/api/default/`**!
 
 ---
 
 ## Testing Your Endpoints
 
-### 1. Create a Product (`POST /api/product/`)
+### 1. Create a Product (`POST /api/default/product/`)
 ```bash
-curl -X POST http://127.0.0.1:8000/api/product/ \
+curl -X POST http://127.0.0.1:8000/api/default/product/ \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Wireless Noise Cancelling Headphones",
@@ -154,15 +154,15 @@ curl -X POST http://127.0.0.1:8000/api/product/ \
 }
 ```
 
-### 2. Query Products with Filtering, Search & Ordering (`GET /api/product/`)
+### 2. Query Products with Filtering, Search & Ordering (`GET /api/default/product/`)
 ```bash
 # Filter active products, search title, and order by price descending
-curl "http://127.0.0.1:8000/api/product/?is_active=true&search=Wireless&ordering=-price"
+curl "http://127.0.0.1:8000/api/default/product/?is_active=true&search=Wireless&ordering=-price"
 ```
 
-### 3. Create an Order (`POST /api/order/`)
+### 3. Create an Order (`POST /api/default/order/`)
 ```bash
-curl -X POST http://127.0.0.1:8000/api/order/ \
+curl -X POST http://127.0.0.1:8000/api/default/order/ \
   -H "Content-Type: application/json" \
   -d '{
     "product": 1,
@@ -171,9 +171,9 @@ curl -X POST http://127.0.0.1:8000/api/order/ \
   }'
 ```
 
-### 4. Fetch Nested Relations (`GET /api/order/?depth=1`)
+### 4. Fetch Nested Relations (`GET /api/default/order/?depth=1`)
 ```bash
-curl "http://127.0.0.1:8000/api/order/1/?depth=1"
+curl "http://127.0.0.1:8000/api/default/order/1/?depth=1"
 ```
 
 ---
@@ -233,7 +233,7 @@ dataman token create "Order Service" --scopes "order:read,order:write,product:re
 
 ### 2. Use Token in Requests
 ```bash
-curl http://127.0.0.1:8000/api/product/ \
+curl http://127.0.0.1:8000/api/default/product/ \
   -H "Authorization: Bearer <YOUR_TOKEN>"
 ```
 

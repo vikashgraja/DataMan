@@ -80,18 +80,18 @@ from rest_framework.test import APIClient
 client = APIClient()
 
 # A. Create an Author
-resp_author = client.post("/api/author/", {"name": "J.K. Rowling", "bio": "British author"}, format="json")
+resp_author = client.post("/api/default/author/", {"name": "J.K. Rowling", "bio": "British author"}, format="json")
 assert resp_author.status_code == 201, f"Expected 201, got {resp_author.status_code}"
 author_id = resp_author.data["id"]
 assert resp_author.data["name"] == "J.K. Rowling"
 
 # B. Create a Book referencing the Author by ID (write serializer without depth)
-resp_book = client.post("/api/book/", {"title": "Harry Potter and the Sorcerer's Stone", "author": author_id}, format="json")
+resp_book = client.post("/api/default/book/", {"title": "Harry Potter and the Sorcerer's Stone", "author": author_id}, format="json")
 assert resp_book.status_code == 201, f"Expected 201, got {resp_book.status_code}"
 book_id = resp_book.data["id"]
 
 # C. Retrieve Book Detail (read serializer with DEPTH=1)
-resp_get = client.get(f"/api/book/{book_id}/")
+resp_get = client.get(f"/api/default/book/{book_id}/")
 assert resp_get.status_code == 200, f"Expected 200, got {resp_get.status_code}"
 assert isinstance(resp_get.data["author"], dict), f"Expected dict for nested author, got {type(resp_get.data['author'])}"
 assert resp_get.data["author"]["id"] == author_id
@@ -100,7 +100,7 @@ assert resp_get.data["author"]["bio"] == "British author"
 assert resp_get.data["title"] == "Harry Potter and the Sorcerer's Stone"
 
 # D. List Books (read serializer with DEPTH=1)
-resp_list = client.get("/api/book/")
+resp_list = client.get("/api/default/book/")
 assert resp_list.status_code == 200
 results = resp_list.data["results"] if "results" in resp_list.data else resp_list.data
 assert len(results) == 1
@@ -108,11 +108,11 @@ assert isinstance(results[0]["author"], dict)
 assert results[0]["author"]["name"] == "J.K. Rowling"
 
 # E. Update Book (PATCH with ID)
-resp_patch = client.patch(f"/api/book/{book_id}/", {"title": "Harry Potter (Updated)"}, format="json")
+resp_patch = client.patch(f"/api/default/book/{book_id}/", {"title": "Harry Potter (Updated)"}, format="json")
 assert resp_patch.status_code == 200
 
 # Verify updated read still preserves depth
-resp_get_updated = client.get(f"/api/book/{book_id}/")
+resp_get_updated = client.get(f"/api/default/book/{book_id}/")
 assert resp_get_updated.data["title"] == "Harry Potter (Updated)"
 assert resp_get_updated.data["author"]["name"] == "J.K. Rowling"
 

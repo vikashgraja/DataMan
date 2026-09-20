@@ -153,7 +153,7 @@ api_client = APIClient()
 api_client.credentials(HTTP_AUTHORIZATION=f"Token {token_key}")
 
 # 4a. Create Customer (RECORD_CREATED)
-r_create = api_client.post("/api/customer/", {"name": "Alice Corp", "email": "alice@corp.com"}, format="json")
+r_create = api_client.post("/api/default/customer/", {"name": "Alice Corp", "email": "alice@corp.com"}, format="json")
 assert r_create.status_code == 201, f"Customer create failed: {r_create.content}"
 cust_id = r_create.json()["id"]
 
@@ -163,7 +163,7 @@ assert create_audit.details["id"] == cust_id
 assert create_audit.actor.startswith("Token:")
 
 # 4b. Update Customer (RECORD_UPDATED)
-r_update = api_client.put(f"/api/customer/{cust_id}/", {"name": "Alice Enterprises", "email": "alice@corp.com"}, format="json")
+r_update = api_client.put(f"/api/default/customer/{cust_id}/", {"name": "Alice Enterprises", "email": "alice@corp.com"}, format="json")
 assert r_update.status_code == 200, f"Customer update failed: {r_update.content}"
 
 update_audit = AuditLog.objects.filter(event_type="RECORD_UPDATED", details__table="Customer").first()
@@ -171,7 +171,7 @@ assert update_audit is not None, "RECORD_UPDATED audit log missing"
 assert update_audit.details["data"]["name"] == "Alice Enterprises"
 
 # 4c. Permission Denied (Customer token trying to write Order)
-r_denied = api_client.post("/api/order/", {"customer": cust_id, "total": "99.99"}, format="json")
+r_denied = api_client.post("/api/default/order/", {"customer": cust_id, "total": "99.99"}, format="json")
 assert r_denied.status_code == 403, f"Expected 403, got: {r_denied.status_code}"
 
 denied_audit = AuditLog.objects.filter(event_type="PERMISSION_DENIED").first()
@@ -179,7 +179,7 @@ assert denied_audit is not None, "PERMISSION_DENIED audit log missing"
 assert denied_audit.severity == "WARNING"
 
 # 4d. Delete Customer (RECORD_DELETED)
-r_del = api_client.delete(f"/api/customer/{cust_id}/")
+r_del = api_client.delete(f"/api/default/customer/{cust_id}/")
 assert r_del.status_code == 204, f"Customer delete failed: {r_del.content}"
 
 del_audit = AuditLog.objects.filter(event_type="RECORD_DELETED", details__table="Customer").first()
@@ -192,7 +192,7 @@ db_token.expires_at = timezone.now() - timedelta(minutes=5)
 db_token.save()
 
 # Try to use expired token
-r_exp = api_client.get("/api/customer/")
+r_exp = api_client.get("/api/default/customer/")
 assert r_exp.status_code in (401, 403), f"Expected 401/403 for expired token, got: {r_exp.status_code}"
 
 exp_audit = AuditLog.objects.filter(event_type="TOKEN_EXPIRED").first()

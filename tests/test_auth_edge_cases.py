@@ -71,41 +71,41 @@ from rest_framework.test import APIClient
 client = APIClient()
 
 # 1. No token -> 403 Forbidden
-r1 = client.get("/api/order/")
+r1 = client.get("/api/default/order/")
 assert r1.status_code == 403
 
 # 2. Valid Bearer token authentication -> 200 OK
 client.credentials(HTTP_AUTHORIZATION="Bearer " + raw_read_token)
-r2_bearer = client.get("/api/order/")
+r2_bearer = client.get("/api/default/order/")
 assert r2_bearer.status_code == 200
 
 # 2b. Unsupported scheme (Basic) -> 403 Forbidden
 client.credentials(HTTP_AUTHORIZATION="Basic " + raw_read_token)
-r2_basic = client.get("/api/order/")
+r2_basic = client.get("/api/default/order/")
 assert r2_basic.status_code == 403
 
 # 3. Invalid token key -> 403 Forbidden
 client.credentials(HTTP_AUTHORIZATION="Token invalid_key_here")
-r3 = client.get("/api/order/")
+r3 = client.get("/api/default/order/")
 assert r3.status_code == 403
 
 # 4. Valid read token, tries to POST -> 403
 client.credentials(HTTP_AUTHORIZATION="Token " + raw_read_token)
-r4_get = client.get("/api/order/")
+r4_get = client.get("/api/default/order/")
 assert r4_get.status_code == 200
-r4_post = client.post("/api/order/", {}, format="json")
+r4_post = client.post("/api/default/order/", {}, format="json")
 assert r4_post.status_code == 403
 
 # 5. Valid write token, tries to GET -> 403
 client.credentials(HTTP_AUTHORIZATION="Token " + raw_write_token)
-r5_post = client.post("/api/order/", {}, format="json")
+r5_post = client.post("/api/default/order/", {}, format="json")
 assert r5_post.status_code == 201
-r5_get = client.get("/api/order/")
+r5_get = client.get("/api/default/order/")
 assert r5_get.status_code == 403
 
 # 6. Bad auth header (multiple parts)
 client.credentials(HTTP_AUTHORIZATION="Token part1 part2")
-r6 = client.get("/api/order/")
+r6 = client.get("/api/default/order/")
 assert r6.status_code == 403
 
 # 7. Model methods coverage

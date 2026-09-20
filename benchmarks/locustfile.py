@@ -20,9 +20,9 @@ class DataManScaleUser(HttpUser):
         status = random.choice(["pending", "processing", "completed"])
         min_amount = random.randint(20, 250)
         self.client.get(
-            f"/api/order/?status={status}&total_amount__gte={min_amount}&ordering=-created_at&page_size=25",
+            f"/api/default/order/?status={status}&total_amount__gte={min_amount}&ordering=-created_at&page_size=25",
             headers=self.headers,
-            name="GET /api/order/ [Multi-Column Filter + Order]",
+            name="GET /api/default/order/ [Multi-Column Filter + Order]",
         )
 
     @task(3)
@@ -33,9 +33,9 @@ class DataManScaleUser(HttpUser):
         """
         customer_id = random.randint(1, self.max_customer_id)
         self.client.get(
-            f"/api/customer/{customer_id}/",
+            f"/api/default/customer/{customer_id}/",
             headers=self.headers,
-            name="GET /api/customer/{id}/ [Nested Relations]",
+            name="GET /api/default/customer/{id}/ [Nested Relations]",
         )
 
     @task(2)
@@ -45,9 +45,9 @@ class DataManScaleUser(HttpUser):
         """
         search_term = random.choice(["Customer_1", "Customer_2", "user_1", "user_2"])
         self.client.get(
-            f"/api/customer/?search={search_term}&ordering=-id&page_size=20",
+            f"/api/default/customer/?search={search_term}&ordering=-id&page_size=20",
             headers=self.headers,
-            name="GET /api/customer/ [Search + Order]",
+            name="GET /api/default/customer/ [Search + Order]",
         )
 
     @task(1)
@@ -61,8 +61,8 @@ class DataManScaleUser(HttpUser):
             "total_amount": f"{round(random.uniform(20.0, 500.0), 2):.2f}",
         }
         self.client.post(
-            "/api/order/",
+            "/api/default/order/",
             json=payload,
             headers={"Content-Type": "application/json", "Accept": "application/json"},
-            name="POST /api/order/ [Concurrent Create]",
+            name="POST /api/default/order/ [Concurrent Create]",
         )

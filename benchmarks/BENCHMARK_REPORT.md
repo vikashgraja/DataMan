@@ -40,10 +40,10 @@ Measures raw query execution and index lookup performance directly on the databa
 
 | HTTP Method | Endpoint | Query Workload | Req/s | Median | Avg Latency | 95th % | Failure Rate |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `GET /api/customer/ [Search + Order]` | Workload Task | 4.35 | **980 ms** | 1043 ms | 1600 ms | **0.00%** |
-| `GET` | `GET /api/customer/{id}/ [Nested Relations]` | Workload Task | 6.20 | **420 ms** | 466 ms | 960 ms | **0.00%** |
-| `GET` | `GET /api/order/ [Multi-Column Filter + Order]` | Workload Task | 8.59 | **580 ms** | 782 ms | 1900 ms | **0.00%** |
-| `POST` | `POST /api/order/ [Concurrent Create]` | Workload Task | 1.30 | **440 ms** | 475 ms | 970 ms | **0.00%** |
+| `GET` | `GET /api/default/customer/ [Search + Order]` | Workload Task | 4.35 | **980 ms** | 1043 ms | 1600 ms | **0.00%** |
+| `GET` | `GET /api/default/customer/{id}/ [Nested Relations]` | Workload Task | 6.20 | **420 ms** | 466 ms | 960 ms | **0.00%** |
+| `GET` | `GET /api/default/order/ [Multi-Column Filter + Order]` | Workload Task | 8.59 | **580 ms** | 782 ms | 1900 ms | **0.00%** |
+| `POST` | `POST /api/default/order/ [Concurrent Create]` | Workload Task | 1.30 | **440 ms** | 475 ms | 970 ms | **0.00%** |
 
 ---
 

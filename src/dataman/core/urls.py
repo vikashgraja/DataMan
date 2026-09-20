@@ -621,15 +621,12 @@ try:
                 viewset_attrs,
             )
 
+            resolved_db = (db_name or "default").lower()
             router.register(
-                f"api/{model_name.lower()}", viewset_class, basename=model_name.lower()
+                f"api/{resolved_db}/{model_name.lower()}",
+                viewset_class,
+                basename=f"{resolved_db}-{model_name.lower()}",
             )
-            if db_name and db_name != "default":
-                router.register(
-                    f"api/{db_name.lower()}/{model_name.lower()}",
-                    viewset_class,
-                    basename=f"{db_name.lower()}-{model_name.lower()}",
-                )
         except Exception as e:
             logger.error(
                 f"Failed to register API routes for table '{getattr(model, '__name__', str(model))}': {e}",

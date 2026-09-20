@@ -27,7 +27,7 @@ call_command("makemigrations")
 call_command("migrate", interactive=False)
 
 from dataman.core import urls
-customer_viewset = next(r[1] for r in urls.router.registry if r[0] == "api/customer")
+customer_viewset = next(r[1] for r in urls.router.registry if r[0] == "api/default/customer")
 
 from dataman.core.permissions import HasTableScope
 assert HasTableScope in customer_viewset.permission_classes

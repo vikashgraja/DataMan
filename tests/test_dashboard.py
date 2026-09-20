@@ -53,9 +53,9 @@ client.login(username="admin", password="password")
 
 # 1. Generate some traffic
 # These hit the API, which should be caught by APILoggingMiddleware
-client.post("/api/article/", {"title": "Test 1"}, format="json")
-client.post("/api/article/", {"title": "Test 2"}, format="json")
-client.get("/api/article/")
+client.post("/api/default/article/", {"title": "Test 1"}, format="json")
+client.post("/api/default/article/", {"title": "Test 2"}, format="json")
+client.get("/api/default/article/")
 client.get("/api/invalid-url/") # 404
 
 from dataman.core.middleware import flush_telemetry_logs
@@ -75,7 +75,7 @@ assert r_logs.status_code == 200, "Analytics logs failed"
 logs = r_logs.json()
 assert len(logs) == 4, f"Expected 4 log entries, got {len(logs)}"
 paths = [log["path"] for log in logs]
-assert "/api/article/" in paths
+assert "/api/default/article/" in paths
 
 # 4. Test Token Management Endpoints (RBAC)
 r_create = client.post(

@@ -27,12 +27,12 @@ call_command("migrate", interactive=False)
 client = APIClient()
 
 # 1. Unauthenticated request should fail
-response = client.get("/api/article/")
+response = client.get("/api/default/article/")
 assert response.status_code in (401, 403)
 assert "Authentication credentials were not provided" in str(response.content)
 
 # 2. Test Auth Rejection (Bad Token)
-response = client.get("/api/article/", HTTP_AUTHORIZATION="Token bad-token")
+response = client.get("/api/default/article/", HTTP_AUTHORIZATION="Token bad-token")
 assert response.status_code == 403
 
 # 3. Create a valid token to bypass auth
@@ -54,17 +54,17 @@ valid_token = f"{prefix}_{raw_secret}"
 # Bad json payload test
 auth_header = {"HTTP_AUTHORIZATION": f"Token {valid_token}"}
 response = client.post(
-    "/api/article/", "bad-json", content_type="application/json", **auth_header
+    "/api/default/article/", "bad-json", content_type="application/json", **auth_header
 )
 assert response.status_code == 400
 
 # 5. Test 404 for missing article
-response = client.get("/api/article/999/", **auth_header)
+response = client.get("/api/default/article/999/", **auth_header)
 assert response.status_code == 404
 
 # 6. Test bad method on list
 response = client.put(
-    "/api/article/", {"title": "x"}, format="json", **auth_header
+    "/api/default/article/", {"title": "x"}, format="json", **auth_header
 )
 assert response.status_code == 405
 

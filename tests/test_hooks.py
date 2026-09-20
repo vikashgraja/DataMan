@@ -85,7 +85,7 @@ from rest_framework.test import APIClient
 client = APIClient()
 client.credentials(HTTP_AUTHORIZATION="Token " + raw_token)
 
-response = client.post("/api/customer/", {"name": "John Doe"}, format="json")
+response = client.post("/api/default/customer/", {"name": "John Doe"}, format="json")
 print("RESPONSE:", response.content)
 assert response.status_code == 201, f"Expected 201, got {response.status_code}"
 assert response.data["name"] == "VALIDATED_John Doe_SERVICED"

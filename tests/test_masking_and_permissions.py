@@ -140,7 +140,7 @@ client = APIClient()
 
 # 1. Create a record with sensitive plain data via Standard Token
 create_resp = client.post(
-    "/api/securecustomer/",
+    "/api/default/securecustomer/",
     data={
         "name": "Alice Johnson",
         "ssn": "123-45-6789",
@@ -169,7 +169,7 @@ with connection.cursor() as cursor:
 
 # 3. GET with Standard Token -> MUST receive masked fields
 get_std_resp = client.get(
-    f"/api/securecustomer/{record_id}/",
+    f"/api/default/securecustomer/{record_id}/",
     HTTP_AUTHORIZATION=f"Token {token_key_std}",
 )
 assert get_std_resp.status_code == 200, get_std_resp.data
@@ -181,7 +181,7 @@ assert std_data["email"] == "a***e@security.org"
 
 # 4. GET with Unmask Token -> MUST receive decrypted plaintext
 get_unmask_resp = client.get(
-    f"/api/securecustomer/{record_id}/",
+    f"/api/default/securecustomer/{record_id}/",
     HTTP_AUTHORIZATION=f"Token {token_key_unmask}",
 )
 assert get_unmask_resp.status_code == 200, get_unmask_resp.data
@@ -193,7 +193,7 @@ assert unmask_data["email"] == "alice@security.org"
 
 # 5. GET with Wildcard Admin Token -> MUST receive decrypted plaintext
 get_admin_resp = client.get(
-    f"/api/securecustomer/{record_id}/",
+    f"/api/default/securecustomer/{record_id}/",
     HTTP_AUTHORIZATION=f"Token {token_key_admin}",
 )
 assert get_admin_resp.status_code == 200, get_admin_resp.data

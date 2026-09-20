@@ -184,16 +184,16 @@ from analytics.Event.models import Event
 client = APIClient()
 
 # POST to Customer (default db)
-r_cust = client.post("/api/customer/", {"name": "Alice", "email": "alice@example.com"}, format="json")
+r_cust = client.post("/api/default/customer/", {"name": "Alice", "email": "alice@example.com"}, format="json")
 assert r_cust.status_code == 201, f"Failed: {r_cust.status_code} {r_cust.content}"
 cust_id = r_cust.json()["id"]
 
-# POST to Event (analytics db) via standard endpoint and namespaced endpoint
-r_evt = client.post("/api/event/", {"name": "page_view", "metric": 42}, format="json")
+# POST to Event (analytics db) via namespaced endpoint
+r_evt = client.post("/api/analytics/event/", {"name": "page_view", "metric": 42}, format="json")
 assert r_evt.status_code == 201, f"Failed: {r_evt.status_code} {r_evt.content}"
 evt_id = r_evt.json()["id"]
 
-# Also verify namespaced endpoint /api/analytics/event/
+# Also verify GET on namespaced endpoint /api/analytics/event/
 r_evt_ns = client.get("/api/analytics/event/")
 assert r_evt_ns.status_code == 200
 assert len(r_evt_ns.json()["results"]) == 1

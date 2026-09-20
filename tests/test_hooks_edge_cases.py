@@ -78,29 +78,29 @@ from rest_framework.test import APIClient
 client = APIClient()
 
 # 1. Validation Error on Create
-r1 = client.post("/api/document/", {"title": "Bad"}, format="json")
+r1 = client.post("/api/default/document/", {"title": "Bad"}, format="json")
 assert r1.status_code == 400
 assert "Cannot be Bad" in str(r1.data)
 
 # 2. Service hook exception on Update
-r2 = client.post("/api/document/", {"title": "Locked"}, format="json")
+r2 = client.post("/api/default/document/", {"title": "Locked"}, format="json")
 assert r2.status_code == 201
 locked_id = r2.data["id"]
 
 try:
-    client.patch(f"/api/document/{locked_id}/", {"title": "Unlocked"}, format="json")
+    client.patch(f"/api/default/document/{locked_id}/", {"title": "Unlocked"}, format="json")
 except ValueError as e:
     assert "Cannot update locked document" in str(e)
 else:
     assert False, "Expected ValueError on before_update"
 
 # 3. Service hook exception on Delete
-r3 = client.post("/api/document/", {"title": "Immortal"}, format="json")
+r3 = client.post("/api/default/document/", {"title": "Immortal"}, format="json")
 assert r3.status_code == 201
 immortal_id = r3.data["id"]
 
 try:
-    client.delete(f"/api/document/{immortal_id}/")
+    client.delete(f"/api/default/document/{immortal_id}/")
 except ValueError as e:
     assert "Cannot delete immortal document" in str(e)
 else:

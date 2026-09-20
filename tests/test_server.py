@@ -54,10 +54,11 @@ django_setup.setup()
 from dataman.core import urls
 
 prefixes = [r[0] for r in urls.router.registry]
-assert "api/customer" in prefixes
+assert "api/default/customer" in prefixes
+assert "api/customer" not in prefixes
 
 customer_viewset = next(
-    r[1] for r in urls.router.registry if r[0] == "api/customer"
+    r[1] for r in urls.router.registry if r[0] == "api/default/customer"
 )
 assert "post" in customer_viewset.http_method_names
 assert "get" not in customer_viewset.http_method_names

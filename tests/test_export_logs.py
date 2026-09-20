@@ -46,8 +46,8 @@ admin = User.objects.create_superuser("admin", "admin@example.com", "adminpass")
 client = APIClient()
 client.force_authenticate(user=admin)
 
-APILog.objects.create(method="GET", path="/api/customer/", status_code=200, duration_ms=15, ip_address="127.0.0.1")
-APILog.objects.create(method="POST", path="/api/order/", status_code=201, duration_ms=25, ip_address="192.168.1.10")
+APILog.objects.create(method="GET", path="/api/default/customer/", status_code=200, duration_ms=15, ip_address="127.0.0.1")
+APILog.objects.create(method="POST", path="/api/default/order/", status_code=201, duration_ms=25, ip_address="192.168.1.10")
 
 AuditLog.objects.create(
     event_type="ADMIN_LOGIN_SUCCESS",

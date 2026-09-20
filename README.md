@@ -31,12 +31,12 @@ dataman server start
 ```
 
 ### What You Get Instantly:
-* **`GET    /api/employee/`** — Paginated list with multi-column filtering, search, and ordering.
-* **`POST   /api/employee/`** — Create records with validation and lifecycle hooks.
-* **`GET    /api/employee/{id}/`** — Point lookup with automatic relational joins (`?depth=1`).
-* **`PUT    /api/employee/{id}/`** — Full update.
-* **`PATCH  /api/employee/{id}/`** — Partial update.
-* **`DELETE /api/employee/{id}/`** — Delete record.
+* **`GET    /api/default/employee/`** — Paginated list with multi-column filtering, search, and ordering.
+* **`POST   /api/default/employee/`** — Create records with validation and lifecycle hooks.
+* **`GET    /api/default/employee/{id}/`** — Point lookup with automatic relational joins (`?depth=1`).
+* **`PUT    /api/default/employee/{id}/`** — Full update.
+* **`PATCH  /api/default/employee/{id}/`** — Partial update.
+* **`DELETE /api/default/employee/{id}/`** — Delete record.
 * **Interactive Swagger UI**: [`http://127.0.0.1:8000/api/docs/`](http://127.0.0.1:8000/api/docs/)
 * **OpenAPI 3.0 Schema**: [`http://127.0.0.1:8000/api/schema/`](http://127.0.0.1:8000/api/schema/)
 
@@ -69,10 +69,10 @@ Model ---> Done! (Instant REST Endpoints + Swagger Docs + Auth)
 Every scaffolded endpoint automatically delivers production response envelopes:
 
 ```json
-// GET /api/employee/?is_active=true&search=Engineering&ordering=-created_at
+// GET /api/default/employee/?is_active=true&search=Engineering&ordering=-created_at
 {
   "count": 48,
-  "next": "http://127.0.0.1:8000/api/employee/?page=2",
+  "next": "http://127.0.0.1:8000/api/default/employee/?page=2",
   "previous": null,
   "results": [
     {
@@ -192,7 +192,7 @@ dataman create table events --database analytics_db
 # 3. Run migrations across all databases (or target a single database)
 dataman migrate --database analytics_db
 ```
-Endpoints are automatically registered at both `api/<table_name>/` and namespaced `api/<database_name>/<table_name>/`.
+Endpoints are automatically registered at `api/<database_name>/<table_name>/` (e.g. `api/default/employee/` or `api/analytics_db/events/`).
 
 ---
 
