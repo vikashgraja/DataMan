@@ -99,6 +99,15 @@ def setup():
         allowed_hosts.append("testserver")
 
     page_size = getattr(project_config, "PAGE_SIZE", 100) if project_config else 100
+    enable_telemetry = (
+        getattr(project_config, "ENABLE_TELEMETRY", True) if project_config else True
+    )
+    telemetry_backend = (
+        getattr(project_config, "TELEMETRY_BACKEND", "db") if project_config else "db"
+    )
+    webhook_dispatcher = (
+        getattr(project_config, "WEBHOOK_DISPATCHER", None) if project_config else None
+    )
     extra_apps = (
         getattr(project_config, "EXTRA_INSTALLED_APPS", []) if project_config else []
     )
@@ -162,6 +171,9 @@ def setup():
         MIGRATION_MODULES=migration_modules_dict,
         ROOT_URLCONF="dataman.core.urls",
         MIDDLEWARE=middleware,
+        ENABLE_TELEMETRY=enable_telemetry,
+        TELEMETRY_BACKEND=telemetry_backend,
+        WEBHOOK_DISPATCHER=webhook_dispatcher,
         TEMPLATES=[
             {
                 "BACKEND": "django.template.backends.django.DjangoTemplates",

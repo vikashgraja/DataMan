@@ -1,9 +1,11 @@
 import atexit
+import json
 import logging
 import queue
 import threading
 import time
 
+from django.conf import settings
 from django.db import close_old_connections
 
 from .models import APILog
@@ -85,6 +87,15 @@ class APILoggingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        backend = getattr(settings, "TELEMETRY_BACKEND", None)
+        if backend is None:
+            enable_telemetry = getattr(settings, "ENABLE_TELEMETRY", True)
+            backend = "db" if enable_telemetry else "none"
+        backend = str(backend).lower()
+
+        if backend in ("none", "false", "off", "disabled"):
+            return self.get_response(request)
+
         path = request.path
         # Only log requests to actual data endpoints,
         # exclude internal/dashboard/docs/health routes.
@@ -111,13 +122,24 @@ class APILoggingMiddleware:
             else request.META.get("REMOTE_ADDR")
         )
 
-        try:
-            _log_queue.put_nowait(
-                (request.method, path, response.status_code, duration_ms, ip)
-            )
-        except queue.Full:
-            logger.warning(
-                "Telemetry log queue full, dropping record under extreme load."
-            )
+        if backend == "stdout":
+            record = {
+                "event": "api_request",
+                "method": request.method,
+                "path": path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+                "ip_address": ip,
+            }
+            logger.info(json.dumps(record))
+        else:
+            try:
+                _log_queue.put_nowait(
+                    (request.method, path, response.status_code, duration_ms, ip)
+                )
+            except queue.Full:
+                logger.warning(
+                    "Telemetry log queue full, dropping record under extreme load."
+                )
 
         return response

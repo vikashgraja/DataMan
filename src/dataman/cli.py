@@ -102,7 +102,10 @@ def init():
             "MAX_PAGE_SIZE = 500\n\n"
             "# Audit & Telemetry\n"
             "ENABLE_AUDIT_LOGGING = True\n"
-            "ENABLE_TELEMETRY = True\n\n"
+            "ENABLE_TELEMETRY = True\n"
+            'TELEMETRY_BACKEND = "db"  # Options: "db" (default), "stdout", "none"\n\n'
+            "# Webhooks (pluggable queue or worker dispatcher)\n"
+            "# WEBHOOK_DISPATCHER = 'my_app.tasks.emit_webhook'\n\n"
             "# Custom Installed Apps (e.g. third-party Django apps)\n"
             "EXTRA_INSTALLED_APPS = []\n\n"
             "# Custom Middleware (appended to request/response pipeline)\n"

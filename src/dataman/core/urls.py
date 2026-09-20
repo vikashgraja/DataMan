@@ -5,6 +5,7 @@ import logging
 
 import requests
 from django.apps import apps
+from django.conf import settings
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 from django_filters.rest_framework import DjangoFilterBackend
@@ -38,11 +39,14 @@ from .views import (
     table_records_view,
 )
 
+logger = logging.getLogger("dataman.core.urls")
 router = routers.DefaultRouter()
 webhook_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 
-def dispatch_webhook(url, action, table_name, data):
+def default_webhook_dispatcher(url, action, table_name, data):
+    """Default in-process background worker for HTTP webhook delivery with retries."""
+
     def _fire():
         try:
             session = requests.Session()
@@ -66,6 +70,49 @@ def dispatch_webhook(url, action, table_name, data):
     webhook_executor.submit(_fire)
 
 
+def resolve_dispatcher(dispatcher_ref):
+    """Resolves a callable or import string to a webhook dispatcher function."""
+    if not dispatcher_ref:
+        return None
+    if callable(dispatcher_ref):
+        return dispatcher_ref
+    if isinstance(dispatcher_ref, str):
+        try:
+            mod_name, func_name = dispatcher_ref.rsplit(".", 1)
+            mod = importlib.import_module(mod_name)
+            return getattr(mod, func_name)
+        except Exception as e:
+            logging.getLogger("dataman.webhooks").error(
+                f"Failed to resolve webhook dispatcher '{dispatcher_ref}': {e}"
+            )
+            return None
+    return None
+
+
+def dispatch_webhook(urls, action, table_name, data, custom_dispatcher=None):
+    """Dispatches webhook payloads to one or more endpoints using a pluggable dispatcher."""
+    if not urls:
+        return
+
+    url_list = [urls] if isinstance(urls, str) else list(urls)
+    disp = None
+    if custom_dispatcher:
+        disp = resolve_dispatcher(custom_dispatcher)
+    if not disp:
+        global_disp = getattr(settings, "WEBHOOK_DISPATCHER", None)
+        disp = resolve_dispatcher(global_disp) or default_webhook_dispatcher
+
+    for u in url_list:
+        if not u:
+            continue
+        try:
+            disp(url=u, action=action, table_name=table_name, data=data)
+        except Exception as e:
+            logging.getLogger("dataman.webhooks").error(
+                f"Webhook dispatch failed for {table_name} ({u}): {e}"
+            )
+
+
 try:
     models_to_process = []
     for entry in TABLE_REGISTRY.values():
@@ -86,465 +133,507 @@ try:
             pass
 
     for model in models_to_process:
-        model_name = model.__name__
-
-        if model_name in ("APIToken", "APILog", "AuditLog"):
-            continue
-
-        table_entry = TABLE_REGISTRY.get(model_name, {})
-        module_prefix = table_entry.get("module_prefix", f"tables.{model_name}")
-        db_name = table_entry.get("database", getattr(model, "_dataman_db", "default"))
-
-        # Read operations from config
-        ops = ["C", "R", "U", "D"]
-        require_auth = False
-        page_size = None
-        filter_fields = []
-        search_fields = []
-        ordering_fields = []
-        webhook_url = None
-        rate_limit = None
-        depth = None
-        masked_fields = {}
-        unmask_scopes = [f"{model_name.lower()}:unmask"]
-        with contextlib.suppress(ModuleNotFoundError):
-            config_module = importlib.import_module(f"{module_prefix}.config")
-            if hasattr(config_module, "ALLOWED_OPERATIONS"):
-                ops = config_module.ALLOWED_OPERATIONS
-            if hasattr(config_module, "REQUIRE_AUTH"):
-                require_auth = config_module.REQUIRE_AUTH
-            if hasattr(config_module, "PAGE_SIZE"):
-                page_size = config_module.PAGE_SIZE
-            if hasattr(config_module, "FILTER_FIELDS"):
-                filter_fields = config_module.FILTER_FIELDS
-            if hasattr(config_module, "SEARCH_FIELDS"):
-                search_fields = config_module.SEARCH_FIELDS
-            if hasattr(config_module, "ORDERING_FIELDS"):
-                ordering_fields = config_module.ORDERING_FIELDS
-            if hasattr(config_module, "WEBHOOK_URL"):
-                webhook_url = config_module.WEBHOOK_URL
-            if hasattr(config_module, "RATE_LIMIT"):
-                rate_limit = config_module.RATE_LIMIT
-            if hasattr(config_module, "DEPTH"):
-                depth = config_module.DEPTH
-            if hasattr(config_module, "MASKED_FIELDS"):
-                masked_fields = config_module.MASKED_FIELDS
-            if hasattr(config_module, "UNMASK_SCOPES"):
-                unmask_scopes = config_module.UNMASK_SCOPES
-
-        http_methods = ["options"]
-        if "C" in ops:
-            http_methods.extend(["post"])
-        if "R" in ops:
-            http_methods.extend(["get", "head"])
-        if "U" in ops:
-            http_methods.extend(["put", "patch"])
-        if "D" in ops:
-            http_methods.extend(["delete"])
-
-        # Try to load custom modules
-        validation_module = None
-        service_module = None
-
         try:
-            validation_module = importlib.import_module(f"{module_prefix}.validation")
-        except ImportError as e:
-            if f"{module_prefix}.validation" not in str(
-                e
-            ) and f"tables.{model_name}.validation" not in str(e):
-                raise
+            model_name = getattr(model, "__name__", None)
+            if not model_name or model_name in ("APIToken", "APILog", "AuditLog"):
+                continue
 
-        try:
-            service_module = importlib.import_module(f"{module_prefix}.service")
-        except ImportError as e:
-            if f"{module_prefix}.service" not in str(
-                e
-            ) and f"tables.{model_name}.service" not in str(e):
-                raise
+            table_entry = TABLE_REGISTRY.get(model_name, {})
+            module_prefix = table_entry.get("module_prefix", f"tables.{model_name}")
+            db_name = table_entry.get(
+                "database", getattr(model, "_dataman_db", "default")
+            )
 
-        # Generate Serializer with validation hook
-        def custom_validate(self, data, v_mod=validation_module):
-            data = super(self.__class__, self).validate(data)
-            if v_mod:
-                if hasattr(v_mod, "Schema"):
-                    try:
-                        parsed = v_mod.Schema(**data)
-                        if hasattr(parsed, "model_dump"):
-                            data = parsed.model_dump()
-                        else:
-                            data = parsed.dict()
-                    except Exception as e:
-                        if e.__class__.__name__ == "ValidationError":
-                            from rest_framework.exceptions import (
-                                ValidationError as DRFValidationError,
-                            )
+            # Read operations from config
+            ops = ["C", "R", "U", "D"]
+            require_auth = False
+            page_size = None
+            filter_fields = []
+            search_fields = []
+            ordering_fields = []
+            webhook_urls = None
+            webhook_dispatcher = None
+            rate_limit = None
+            depth = None
+            masked_fields = {}
+            unmask_scopes = [f"{model_name.lower()}:unmask"]
+            with contextlib.suppress(ModuleNotFoundError):
+                config_module = importlib.import_module(f"{module_prefix}.config")
+                if hasattr(config_module, "ALLOWED_OPERATIONS"):
+                    ops = config_module.ALLOWED_OPERATIONS
+                if hasattr(config_module, "REQUIRE_AUTH"):
+                    require_auth = config_module.REQUIRE_AUTH
+                if hasattr(config_module, "PAGE_SIZE"):
+                    page_size = config_module.PAGE_SIZE
+                if hasattr(config_module, "FILTER_FIELDS"):
+                    filter_fields = config_module.FILTER_FIELDS
+                if hasattr(config_module, "SEARCH_FIELDS"):
+                    search_fields = config_module.SEARCH_FIELDS
+                if hasattr(config_module, "ORDERING_FIELDS"):
+                    ordering_fields = config_module.ORDERING_FIELDS
+                if hasattr(config_module, "WEBHOOK_URL"):
+                    webhook_urls = config_module.WEBHOOK_URL
+                elif hasattr(config_module, "WEBHOOK_URLS"):
+                    webhook_urls = config_module.WEBHOOK_URLS
+                if hasattr(config_module, "WEBHOOK_DISPATCHER"):
+                    webhook_dispatcher = config_module.WEBHOOK_DISPATCHER
+                if hasattr(config_module, "RATE_LIMIT"):
+                    rate_limit = config_module.RATE_LIMIT
+                if hasattr(config_module, "DEPTH"):
+                    depth = config_module.DEPTH
+                if hasattr(config_module, "MASKED_FIELDS"):
+                    masked_fields = config_module.MASKED_FIELDS
+                if hasattr(config_module, "UNMASK_SCOPES"):
+                    unmask_scopes = config_module.UNMASK_SCOPES
 
-                            raise DRFValidationError(e.errors()) from e
-                        raise
-                elif hasattr(v_mod, "validate"):
-                    return v_mod.validate(data)
-            return data
+            http_methods = ["options"]
+            if "C" in ops:
+                http_methods.extend(["post"])
+            if "R" in ops:
+                http_methods.extend(["get", "head"])
+            if "U" in ops:
+                http_methods.extend(["put", "patch"])
+            if "D" in ops:
+                http_methods.extend(["delete"])
 
-        def custom_to_representation(
-            self, instance, m_fields=masked_fields, u_scopes=unmask_scopes
-        ):
-            rep = super(self.__class__, self).to_representation(instance)
-            if not m_fields:
+            # Try to load custom modules
+            validation_module = None
+            service_module = None
+
+            try:
+                validation_module = importlib.import_module(
+                    f"{module_prefix}.validation"
+                )
+            except ImportError as e:
+                if f"{module_prefix}.validation" not in str(
+                    e
+                ) and f"tables.{model_name}.validation" not in str(e):
+                    raise
+
+            try:
+                service_module = importlib.import_module(f"{module_prefix}.service")
+            except ImportError as e:
+                if f"{module_prefix}.service" not in str(
+                    e
+                ) and f"tables.{model_name}.service" not in str(e):
+                    raise
+
+            # Generate Serializer with validation hook
+            def custom_validate(self, data, v_mod=validation_module):
+                data = super(self.__class__, self).validate(data)
+                if v_mod:
+                    if hasattr(v_mod, "Schema"):
+                        try:
+                            parsed = v_mod.Schema(**data)
+                            if hasattr(parsed, "model_dump"):
+                                data = parsed.model_dump()
+                            else:
+                                data = parsed.dict()
+                        except Exception as e:
+                            if e.__class__.__name__ == "ValidationError":
+                                from rest_framework.exceptions import (
+                                    ValidationError as DRFValidationError,
+                                )
+
+                                raise DRFValidationError(e.errors()) from e
+                            raise
+                    elif hasattr(v_mod, "validate"):
+                        return v_mod.validate(data)
+                return data
+
+            def custom_to_representation(
+                self, instance, m_fields=masked_fields, u_scopes=unmask_scopes
+            ):
+                rep = super(self.__class__, self).to_representation(instance)
+                if not m_fields:
+                    return rep
+
+                request = self.context.get("request")
+                allow_unmasked = False
+
+                if request:
+                    user = getattr(request, "user", None)
+                    if user and getattr(user, "is_superuser", False):
+                        allow_unmasked = True
+                    elif (
+                        hasattr(request, "auth")
+                        and request.auth
+                        and hasattr(request.auth, "scopes")
+                    ):
+                        token_scopes = request.auth.scopes or []
+                        if "*" in token_scopes or any(
+                            s in token_scopes for s in u_scopes
+                        ):
+                            allow_unmasked = True
+
+                if not allow_unmasked:
+                    field_strategies = (
+                        m_fields
+                        if isinstance(m_fields, dict)
+                        else dict.fromkeys(m_fields, "partial")
+                    )
+                    for field_name, strategy in field_strategies.items():
+                        if field_name in rep and rep[field_name] is not None:
+                            rep[field_name] = mask_value(rep[field_name], strategy)
+
                 return rep
 
-            request = self.context.get("request")
-            allow_unmasked = False
-
-            if request:
-                user = getattr(request, "user", None)
-                if user and getattr(user, "is_superuser", False):
-                    allow_unmasked = True
-                elif (
-                    hasattr(request, "auth")
-                    and request.auth
-                    and hasattr(request.auth, "scopes")
-                ):
-                    token_scopes = request.auth.scopes or []
-                    if "*" in token_scopes or any(s in token_scopes for s in u_scopes):
-                        allow_unmasked = True
-
-            if not allow_unmasked:
-                field_strategies = (
-                    m_fields
-                    if isinstance(m_fields, dict)
-                    else dict.fromkeys(m_fields, "partial")
-                )
-                for field_name, strategy in field_strategies.items():
-                    if field_name in rep and rep[field_name] is not None:
-                        rep[field_name] = mask_value(rep[field_name], strategy)
-
-            return rep
-
-        class Meta:
-            model = model
-            fields = "__all__"
-
-        serializer_class = type(
-            f"{model_name}Serializer",
-            (serializers.ModelSerializer,),
-            {
-                "Meta": Meta,
-                "validate": custom_validate,
-                "to_representation": custom_to_representation,
-            },
-        )
-
-        read_serializer_class = serializer_class
-        if depth is not None and depth > 0:
-
-            class ReadMeta:
+            class Meta:
                 model = model
                 fields = "__all__"
-                depth = depth
 
-            read_serializer_class = type(
-                f"{model_name}ReadSerializer",
+            serializer_class = type(
+                f"{model_name}Serializer",
                 (serializers.ModelSerializer,),
                 {
-                    "Meta": ReadMeta,
+                    "Meta": Meta,
                     "validate": custom_validate,
                     "to_representation": custom_to_representation,
                 },
             )
 
-        # Permissions
-        permission_classes = []
-        if require_auth:
-            from dataman.core.permissions import HasTableScope
+            read_serializer_class = serializer_class
+            if depth is not None and depth > 0:
 
-            permission_classes = [HasTableScope]
-        else:
-            from rest_framework.permissions import AllowAny
+                class ReadMeta:
+                    model = model
+                    fields = "__all__"
+                    depth = depth
 
-            permission_classes = [AllowAny]
-
-        # Viewset service hooks
-        def make_hooks(s_mod, w_url, t_name, d_name):
-            def _create(self, serializer):
-                if s_mod and hasattr(s_mod, "before_create"):
-                    s_mod.before_create(serializer.validated_data)
-
-                instance = serializer.save()
-
-                if s_mod and hasattr(s_mod, "after_create"):
-                    s_mod.after_create(instance)
-
-                log_audit_event(
-                    event_type="RECORD_CREATED",
-                    request=getattr(self, "request", None),
-                    details={
-                        "table": t_name,
-                        "database": d_name,
-                        "id": getattr(instance, "id", None),
-                        "data": serializer.data,
+                read_serializer_class = type(
+                    f"{model_name}ReadSerializer",
+                    (serializers.ModelSerializer,),
+                    {
+                        "Meta": ReadMeta,
+                        "validate": custom_validate,
+                        "to_representation": custom_to_representation,
                     },
-                    severity="INFO",
-                    status_code=201,
                 )
 
-                if w_url:
-                    data = (
-                        serializer.data
-                        if isinstance(serializer.data, list)
-                        else [serializer.data]
+            # Permissions
+            permission_classes = []
+            if require_auth:
+                from dataman.core.permissions import HasTableScope
+
+                permission_classes = [HasTableScope]
+            else:
+                from rest_framework.permissions import AllowAny
+
+                permission_classes = [AllowAny]
+
+            # Viewset service hooks
+            def make_hooks(s_mod, w_urls, t_name, d_name, w_disp=None):
+                def _create(self, serializer):
+                    if s_mod and hasattr(s_mod, "before_create"):
+                        s_mod.before_create(serializer.validated_data)
+
+                    instance = serializer.save()
+
+                    if s_mod and hasattr(s_mod, "after_create"):
+                        s_mod.after_create(instance)
+
+                    log_audit_event(
+                        event_type="RECORD_CREATED",
+                        request=getattr(self, "request", None),
+                        details={
+                            "table": t_name,
+                            "database": d_name,
+                            "id": getattr(instance, "id", None),
+                            "data": serializer.data,
+                        },
+                        severity="INFO",
+                        status_code=201,
                     )
-                    for item in data:
-                        dispatch_webhook(w_url, "create", t_name, item)
 
-            def _update(self, serializer):
-                if s_mod and hasattr(s_mod, "before_update"):
-                    s_mod.before_update(serializer.instance, serializer.validated_data)
-
-                instance = serializer.save()
-
-                if s_mod and hasattr(s_mod, "after_update"):
-                    s_mod.after_update(instance)
-
-                log_audit_event(
-                    event_type="RECORD_UPDATED",
-                    request=getattr(self, "request", None),
-                    details={
-                        "table": t_name,
-                        "database": d_name,
-                        "id": getattr(instance, "id", None),
-                        "data": serializer.data,
-                    },
-                    severity="INFO",
-                    status_code=200,
-                )
-
-                if w_url:
-                    dispatch_webhook(w_url, "update", t_name, serializer.data)
-
-            def _destroy(self, instance):
-                instance_id = getattr(instance, "id", None)
-                data_to_send = {"id": instance_id} if w_url else None
-
-                if s_mod and hasattr(s_mod, "before_destroy"):
-                    s_mod.before_destroy(instance)
-
-                viewsets.ModelViewSet.perform_destroy(self, instance)
-
-                if s_mod and hasattr(s_mod, "after_destroy"):
-                    s_mod.after_destroy(instance)
-
-                log_audit_event(
-                    event_type="RECORD_DELETED",
-                    request=getattr(self, "request", None),
-                    details={"table": t_name, "database": d_name, "id": instance_id},
-                    severity="WARNING",
-                    status_code=204,
-                )
-
-                if w_url:
-                    dispatch_webhook(w_url, "destroy", t_name, data_to_send)
-
-            return _create, _update, _destroy
-
-        custom_perform_create, custom_perform_update, custom_perform_destroy = (
-            make_hooks(service_module, webhook_url, model_name, db_name)
-        )
-
-        viewset_attrs = {
-            "queryset": model.objects.all(),
-            "serializer_class": serializer_class,
-            "http_method_names": http_methods,
-            "permission_classes": permission_classes,
-            "perform_create": custom_perform_create,
-            "perform_update": custom_perform_update,
-            "perform_destroy": custom_perform_destroy,
-        }
-
-        def custom_get_queryset(self, m=model, d=depth):
-            qs = m.objects.all()
-            if d is not None and d > 0:
-                fk_fields = [
-                    f.name
-                    for f in m._meta.fields
-                    if f.is_relation and (f.many_to_one or f.one_to_one)
-                ]
-                if fk_fields:
-                    qs = qs.select_related(*fk_fields)
-                reverse_rel_fields = [
-                    f.get_accessor_name()
-                    for f in m._meta.related_objects
-                    if f.get_accessor_name()
-                ]
-                if reverse_rel_fields:
-                    qs = qs.prefetch_related(*reverse_rel_fields)
-            return qs
-
-        viewset_attrs["get_queryset"] = custom_get_queryset
-
-        if depth is not None and depth > 0:
-
-            def custom_get_serializer_class(
-                self, r_class=read_serializer_class, w_class=serializer_class
-            ):
-                if getattr(self, "action", None) in ("list", "retrieve") or (
-                    hasattr(self, "request")
-                    and self.request
-                    and self.request.method in ("GET", "HEAD", "OPTIONS")
-                ):
-                    return r_class
-                return w_class
-
-            viewset_attrs["get_serializer_class"] = custom_get_serializer_class
-
-        # Bulk creation support
-        def custom_get_serializer(self, *args, **kwargs):
-            if isinstance(kwargs.get("data", {}), list):
-                kwargs["many"] = True
-            return viewsets.ModelViewSet.get_serializer(self, *args, **kwargs)
-
-        viewset_attrs["get_serializer"] = custom_get_serializer
-
-        # Pagination
-        if page_size:
-
-            class FastPaginator:
-                def __init__(self, object_list, per_page):
-                    self.object_list = object_list
-                    self.per_page = per_page
-                    self._count = None
-
-                @property
-                def count(self):
-                    if self._count is None:
-                        try:
-                            self._count = self.object_list.count()
-                        except Exception:
-                            self._count = 0
-                    return self._count
-
-                @property
-                def num_pages(self):
-                    if self.count == 0:
-                        return 1
-                    return (self.count + self.per_page - 1) // self.per_page
-
-                @property
-                def page_range(self):
-                    return range(1, self.num_pages + 1)
-
-                def page(self, number):
-                    number = int(number)
-                    bottom = (number - 1) * self.per_page
-                    top = bottom + self.per_page
-                    items = list(self.object_list[bottom : top + 1])
-                    has_next = len(items) > self.per_page
-                    if has_next:
-                        items = items[: self.per_page]
-
-                    class FastPage:
-                        def __init__(
-                            self, object_list, number, paginator, has_next, bottom
-                        ):
-                            self.object_list = object_list
-                            self.number = number
-                            self.paginator = paginator
-                            self._has_next = has_next
-                            self._bottom = bottom
-
-                        def __len__(self):
-                            return len(self.object_list)
-
-                        def __iter__(self):
-                            return iter(self.object_list)
-
-                        def __getitem__(self, index):
-                            return self.object_list[index]
-
-                        def has_next(self):
-                            return self._has_next
-
-                        def has_previous(self):
-                            return self.number > 1
-
-                        def next_page_number(self):
-                            return self.number + 1
-
-                        def previous_page_number(self):
-                            return self.number - 1
-
-                        def start_index(self):
-                            return self._bottom + 1
-
-                        def end_index(self):
-                            return self._bottom + len(self.object_list)
-
-                    return FastPage(items, number, self, has_next, bottom)
-
-            class CustomPagination(PageNumberPagination):
-                page_size_val = page_size
-                django_paginator_class = FastPaginator
-                page_size_query_param = "page_size"
-                max_page_size = 500
-
-                def get_page_size(self, request):
-                    if self.page_size_query_param:
-                        with contextlib.suppress(Exception):
-                            val = int(
-                                request.query_params.get(
-                                    self.page_size_query_param, self.page_size_val
-                                )
+                    if w_urls:
+                        data = (
+                            serializer.data
+                            if isinstance(serializer.data, list)
+                            else [serializer.data]
+                        )
+                        for item in data:
+                            dispatch_webhook(
+                                w_urls, "create", t_name, item, custom_dispatcher=w_disp
                             )
-                            return min(max(val, 1), self.max_page_size)
-                    return self.page_size_val
 
-            viewset_attrs["pagination_class"] = CustomPagination
+                def _update(self, serializer):
+                    if s_mod and hasattr(s_mod, "before_update"):
+                        s_mod.before_update(
+                            serializer.instance, serializer.validated_data
+                        )
 
-        # Filtering, Searching, Ordering
-        filter_backends = []
-        if filter_fields:
-            filter_backends.append(DjangoFilterBackend)
-            viewset_attrs["filterset_fields"] = filter_fields
-        if search_fields:
-            filter_backends.append(SearchFilter)
-            viewset_attrs["search_fields"] = search_fields
-        if ordering_fields:
-            filter_backends.append(OrderingFilter)
-            viewset_attrs["ordering_fields"] = ordering_fields
+                    instance = serializer.save()
 
-        viewset_attrs["ordering"] = ["-id"]
+                    if s_mod and hasattr(s_mod, "after_update"):
+                        s_mod.after_update(instance)
 
-        if filter_backends:
-            viewset_attrs["filter_backends"] = filter_backends
+                    log_audit_event(
+                        event_type="RECORD_UPDATED",
+                        request=getattr(self, "request", None),
+                        details={
+                            "table": t_name,
+                            "database": d_name,
+                            "id": getattr(instance, "id", None),
+                            "data": serializer.data,
+                        },
+                        severity="INFO",
+                        status_code=200,
+                    )
 
-        # Rate Limiting
-        if rate_limit:
+                    if w_urls:
+                        dispatch_webhook(
+                            w_urls,
+                            "update",
+                            t_name,
+                            serializer.data,
+                            custom_dispatcher=w_disp,
+                        )
 
-            class CustomThrottle(ScopedRateThrottle):
-                scope = f"{model_name.lower()}_throttle"
-                THROTTLE_RATES = {scope: rate_limit}
+                def _destroy(self, instance):
+                    instance_id = getattr(instance, "id", None)
+                    data_to_send = {"id": instance_id} if w_urls else None
 
-                def __init__(self):
-                    self.THROTTLE_RATES = CustomThrottle.THROTTLE_RATES
-                    super().__init__()
+                    if s_mod and hasattr(s_mod, "before_destroy"):
+                        s_mod.before_destroy(instance)
 
-            viewset_attrs["throttle_classes"] = [CustomThrottle]
-            viewset_attrs["throttle_scope"] = f"{model_name.lower()}_throttle"
+                    viewsets.ModelViewSet.perform_destroy(self, instance)
 
-        # Generate ViewSet
-        viewset_class = type(
-            f"{model_name}ViewSet",
-            (viewsets.ModelViewSet,),
-            viewset_attrs,
-        )
+                    if s_mod and hasattr(s_mod, "after_destroy"):
+                        s_mod.after_destroy(instance)
 
-        router.register(
-            f"api/{model_name.lower()}", viewset_class, basename=model_name.lower()
-        )
-        if db_name and db_name != "default":
+                    log_audit_event(
+                        event_type="RECORD_DELETED",
+                        request=getattr(self, "request", None),
+                        details={
+                            "table": t_name,
+                            "database": d_name,
+                            "id": instance_id,
+                        },
+                        severity="WARNING",
+                        status_code=204,
+                    )
+
+                    if w_urls:
+                        dispatch_webhook(
+                            w_urls,
+                            "destroy",
+                            t_name,
+                            data_to_send,
+                            custom_dispatcher=w_disp,
+                        )
+
+                return _create, _update, _destroy
+
+            custom_perform_create, custom_perform_update, custom_perform_destroy = (
+                make_hooks(
+                    service_module,
+                    webhook_urls,
+                    model_name,
+                    db_name,
+                    w_disp=webhook_dispatcher,
+                )
+            )
+
+            viewset_attrs = {
+                "queryset": model.objects.all(),
+                "serializer_class": serializer_class,
+                "http_method_names": http_methods,
+                "permission_classes": permission_classes,
+                "perform_create": custom_perform_create,
+                "perform_update": custom_perform_update,
+                "perform_destroy": custom_perform_destroy,
+            }
+
+            def custom_get_queryset(self, m=model, d=depth):
+                qs = m.objects.all()
+                if d is not None and d > 0:
+                    fk_fields = [
+                        f.name
+                        for f in m._meta.fields
+                        if f.is_relation and (f.many_to_one or f.one_to_one)
+                    ]
+                    if fk_fields:
+                        qs = qs.select_related(*fk_fields)
+                    reverse_rel_fields = [
+                        f.get_accessor_name()
+                        for f in m._meta.related_objects
+                        if f.get_accessor_name()
+                    ]
+                    if reverse_rel_fields:
+                        qs = qs.prefetch_related(*reverse_rel_fields)
+                return qs
+
+            viewset_attrs["get_queryset"] = custom_get_queryset
+
+            if depth is not None and depth > 0:
+
+                def custom_get_serializer_class(
+                    self, r_class=read_serializer_class, w_class=serializer_class
+                ):
+                    if getattr(self, "action", None) in ("list", "retrieve") or (
+                        hasattr(self, "request")
+                        and self.request
+                        and self.request.method in ("GET", "HEAD", "OPTIONS")
+                    ):
+                        return r_class
+                    return w_class
+
+                viewset_attrs["get_serializer_class"] = custom_get_serializer_class
+
+            # Bulk creation support
+            def custom_get_serializer(self, *args, **kwargs):
+                if isinstance(kwargs.get("data", {}), list):
+                    kwargs["many"] = True
+                return viewsets.ModelViewSet.get_serializer(self, *args, **kwargs)
+
+            viewset_attrs["get_serializer"] = custom_get_serializer
+
+            # Pagination
+            if page_size:
+
+                class FastPaginator:
+                    def __init__(self, object_list, per_page):
+                        self.object_list = object_list
+                        self.per_page = per_page
+                        self._count = None
+
+                    @property
+                    def count(self):
+                        if self._count is None:
+                            try:
+                                self._count = self.object_list.count()
+                            except Exception:
+                                self._count = 0
+                        return self._count
+
+                    @property
+                    def num_pages(self):
+                        if self.count == 0:
+                            return 1
+                        return (self.count + self.per_page - 1) // self.per_page
+
+                    @property
+                    def page_range(self):
+                        return range(1, self.num_pages + 1)
+
+                    def page(self, number):
+                        number = int(number)
+                        bottom = (number - 1) * self.per_page
+                        top = bottom + self.per_page
+                        items = list(self.object_list[bottom : top + 1])
+                        has_next = len(items) > self.per_page
+                        if has_next:
+                            items = items[: self.per_page]
+
+                        class FastPage:
+                            def __init__(
+                                self, object_list, number, paginator, has_next, bottom
+                            ):
+                                self.object_list = object_list
+                                self.number = number
+                                self.paginator = paginator
+                                self._has_next = has_next
+                                self._bottom = bottom
+
+                            def __len__(self):
+                                return len(self.object_list)
+
+                            def __iter__(self):
+                                return iter(self.object_list)
+
+                            def __getitem__(self, index):
+                                return self.object_list[index]
+
+                            def has_next(self):
+                                return self._has_next
+
+                            def has_previous(self):
+                                return self.number > 1
+
+                            def next_page_number(self):
+                                return self.number + 1
+
+                            def previous_page_number(self):
+                                return self.number - 1
+
+                            def start_index(self):
+                                return self._bottom + 1
+
+                            def end_index(self):
+                                return self._bottom + len(self.object_list)
+
+                        return FastPage(items, number, self, has_next, bottom)
+
+                class CustomPagination(PageNumberPagination):
+                    page_size_val = page_size
+                    django_paginator_class = FastPaginator
+                    page_size_query_param = "page_size"
+                    max_page_size = 500
+
+                    def get_page_size(self, request):
+                        if self.page_size_query_param:
+                            with contextlib.suppress(Exception):
+                                val = int(
+                                    request.query_params.get(
+                                        self.page_size_query_param, self.page_size_val
+                                    )
+                                )
+                                return min(max(val, 1), self.max_page_size)
+                        return self.page_size_val
+
+                viewset_attrs["pagination_class"] = CustomPagination
+
+            # Filtering, Searching, Ordering
+            filter_backends = []
+            if filter_fields:
+                filter_backends.append(DjangoFilterBackend)
+                viewset_attrs["filterset_fields"] = filter_fields
+            if search_fields:
+                filter_backends.append(SearchFilter)
+                viewset_attrs["search_fields"] = search_fields
+            if ordering_fields:
+                filter_backends.append(OrderingFilter)
+                viewset_attrs["ordering_fields"] = ordering_fields
+
+            viewset_attrs["ordering"] = ["-id"]
+
+            if filter_backends:
+                viewset_attrs["filter_backends"] = filter_backends
+
+            # Rate Limiting
+            if rate_limit:
+
+                class CustomThrottle(ScopedRateThrottle):
+                    scope = f"{model_name.lower()}_throttle"
+                    THROTTLE_RATES = {scope: rate_limit}
+
+                    def __init__(self):
+                        self.THROTTLE_RATES = CustomThrottle.THROTTLE_RATES
+                        super().__init__()
+
+                viewset_attrs["throttle_classes"] = [CustomThrottle]
+                viewset_attrs["throttle_scope"] = f"{model_name.lower()}_throttle"
+
+            # Generate ViewSet
+            viewset_class = type(
+                f"{model_name}ViewSet",
+                (viewsets.ModelViewSet,),
+                viewset_attrs,
+            )
+
             router.register(
-                f"api/{db_name.lower()}/{model_name.lower()}",
-                viewset_class,
-                basename=f"{db_name.lower()}-{model_name.lower()}",
+                f"api/{model_name.lower()}", viewset_class, basename=model_name.lower()
+            )
+            if db_name and db_name != "default":
+                router.register(
+                    f"api/{db_name.lower()}/{model_name.lower()}",
+                    viewset_class,
+                    basename=f"{db_name.lower()}-{model_name.lower()}",
+                )
+        except Exception as e:
+            logger.error(
+                f"Failed to register API routes for table '{getattr(model, '__name__', str(model))}': {e}",
+                exc_info=True,
             )
 except LookupError:
     pass
