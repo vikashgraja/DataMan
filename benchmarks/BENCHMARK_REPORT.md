@@ -1,6 +1,6 @@
 # DataMan High-Performance Scale Benchmark Report
 
-**Generated**: September 20, 2026 - 15:40:34
+**Generated**: September 20, 2026 - 15:54:34
 **Environment**: Windows 11 (AMD64) | 12 vCPUs
 **Database Engine**: PostgreSQL
 **Framework**: `dataman-engine` (ASGI / Uvicorn)
@@ -14,11 +14,11 @@ Measures raw query execution and index lookup performance directly on the databa
 
 | Workload / Query Type | Query Scope | Average Latency | Performance Status |
 | :--- | :--- | :--- | :--- |
-| **Point Lookup (Indexed PK)** | 1 row | **0.728 ms** | Sub-millisecond |
-| **Multi-Column Filter + Order** | 25 rows | **1.406 ms** | High-Speed |
-| **FK Join (`select_related`)** | 50 rows | **2.451 ms** | Optimized |
-| **Reverse Join (`prefetch_related`)** | 25 parents + children | **38.143 ms** | Batch Joined |
-| **Scale Aggregation (AVG + COUNT)** | 1,000,000+ rows | **86.909 ms** | Parallel Scan |
+| **Point Lookup (Indexed PK)** | 1 row | **0.720 ms** | Sub-millisecond |
+| **Multi-Column Filter + Order** | 25 rows | **1.459 ms** | High-Speed |
+| **FK Join (`select_related`)** | 50 rows | **2.533 ms** | Optimized |
+| **Reverse Join (`prefetch_related`)** | 25 parents + children | **37.404 ms** | Batch Joined |
+| **Scale Aggregation (AVG + COUNT)** | 1,000,000+ rows | **88.505 ms** | Parallel Scan |
 
 ---
 
@@ -27,12 +27,11 @@ Measures raw query execution and index lookup performance directly on the databa
 | Metric | Measured Result | Benchmark Target | Status |
 | :--- | :--- | :--- | :--- |
 | **Database Engine** | **PostgreSQL** | PostgreSQL / SQLite | Active |
-| **In-Memory Record Generation** | **8,050,240 rows/sec** | > 10,000 rows/sec | Passed |
-| **HTTP Success Rate** | **100.00%** (224/224) | > 99.0% | Flawless |
-| **Median API Latency** | **560 ms** | < 800 ms | Passed |
-| **95th Percentile Latency** | **1100 ms** | < 2,000 ms | Passed |
-| **Peak Throughput** | **24.64 req/sec** | > 15 req/sec (4 Workers) | Passed |
-
+| **In-Memory Record Generation** | **9,341,601 rows/sec** | > 10,000 rows/sec | Passed |
+| **HTTP Success Rate** | **100.00%** (225/225) | > 99.0% | Flawless |
+| **Median API Latency** | **580 ms** | < 800 ms | Passed |
+| **95th Percentile Latency** | **1000 ms** | < 2,000 ms | Passed |
+| **Peak Throughput** | **24.85 req/sec** | > 15 req/sec | Passed |
 
 ---
 
@@ -40,10 +39,10 @@ Measures raw query execution and index lookup performance directly on the databa
 
 | HTTP Method | Endpoint | Query Workload | Req/s | Median | Avg Latency | 95th % | Failure Rate |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `GET /api/default/customer/ [Search + Order]` | Workload Task | 4.62 | **800 ms** | 865 ms | 1400 ms | **0.00%** |
-| `GET` | `GET /api/default/customer/{id}/ [Nested Relations]` | Workload Task | 5.94 | **340 ms** | 367 ms | 810 ms | **0.00%** |
-| `GET` | `GET /api/default/order/ [Multi-Column Filter + Order]` | Workload Task | 11.77 | **610 ms** | 646 ms | 1100 ms | **0.00%** |
-| `POST` | `POST /api/default/order/ [Concurrent Create]` | Workload Task | 2.31 | **310 ms** | 336 ms | 490 ms | **0.00%** |
+| `GET` | `GET /api/default/customer/ [Search + Order]` | Workload Task | 4.53 | **930 ms** | 914 ms | 1100 ms | **0.00%** |
+| `GET` | `GET /api/default/customer/{id}/ [Nested Relations]` | Workload Task | 6.85 | **440 ms** | 427 ms | 630 ms | **0.00%** |
+| `GET` | `GET /api/default/order/ [Multi-Column Filter + Order]` | Workload Task | 11.71 | **620 ms** | 631 ms | 1000 ms | **0.00%** |
+| `POST` | `POST /api/default/order/ [Concurrent Create]` | Workload Task | 1.77 | **410 ms** | 436 ms | 850 ms | **0.00%** |
 
 ---
 
