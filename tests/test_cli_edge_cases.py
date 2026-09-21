@@ -49,3 +49,35 @@ def test_create_table_existing(tmp_path):
         result = runner.invoke(cli, ["create", "table", "User"])
         assert result.exit_code != 0
         assert "already exists" in result.output
+
+
+def test_init_preserves_existing_files(tmp_path):
+    """Test that dataman init does not overwrite existing .env, database.py, or config.py."""
+    runner = CliRunner()
+    with contextlib.chdir(tmp_path):
+        # Pre-create .env with existing secrets
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "EXISTING_SECRET_KEY='my-custom-key'\nFOO=BAR\n", encoding="utf-8"
+        )
+
+        # Pre-create database.py
+        db_file = tmp_path / "database.py"
+        db_file.write_text("# Custom database config\n", encoding="utf-8")
+
+        # Run init
+        result = runner.invoke(cli, ["init"])
+        assert result.exit_code == 0
+        assert "Updated existing .env" in result.output
+        assert "Preserved existing database.py" in result.output
+
+        # Verify existing secrets are preserved
+        env_content = env_file.read_text(encoding="utf-8")
+        assert "EXISTING_SECRET_KEY='my-custom-key'" in env_content
+        assert "FOO=BAR" in env_content
+        assert "DATAMAN_SECRET_KEY=" in env_content
+        assert "DATABASE_URL=" in env_content
+
+        # Verify database.py was not wiped out
+        db_content = db_file.read_text(encoding="utf-8")
+        assert "# Custom database config" in db_content

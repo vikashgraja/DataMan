@@ -36,84 +36,114 @@ def init():
     tables_dir = cwd / "tables"
     migrations_dir = tables_dir / "migrations"
 
-    if env_path.exists() and (database_file.exists() or tables_dir.exists()):
+    if env_path.exists() and database_file.exists() and tables_dir.exists():
         click.echo(
             click.style("Project already initialized in this directory.", fg="yellow")
         )
         return
 
-    # Create .env
-    secret_key = secrets.token_urlsafe(50)
-    with open(env_path, "w") as f:
-        f.write(f"DATAMAN_SECRET_KEY='{secret_key}'\n")
-        f.write("DEBUG=True\n")
-        f.write("DATABASE_URL=sqlite:///db.sqlite3\n")
-        f.write("ALLOWED_HOSTS=127.0.0.1,localhost\n")
-    click.echo(click.style("Created .env file.", fg="green"))
+    # 1. Handle .env safely without destructive overwrite
+    if env_path.exists():
+        existing_env = env_path.read_text(encoding="utf-8")
+        to_append = []
+        if "DATAMAN_SECRET_KEY" not in existing_env:
+            secret_key = secrets.token_urlsafe(50)
+            to_append.append(f"DATAMAN_SECRET_KEY='{secret_key}'")
+        if "DEBUG=" not in existing_env:
+            to_append.append("DEBUG=True")
+        if "DATABASE_URL=" not in existing_env:
+            to_append.append("DATABASE_URL=sqlite:///db.sqlite3")
+        if "ALLOWED_HOSTS=" not in existing_env:
+            to_append.append("ALLOWED_HOSTS=127.0.0.1,localhost")
 
-    # Create database.py
-    with open(database_file, "w") as f:
-        f.write(
-            '"""\n'
-            "DataMan Database Configuration\n"
-            "Configure your primary and replica database connections here.\n"
-            '"""\n'
-            "import os\n"
-            "from pathlib import Path\n"
-            "import dj_database_url\n\n"
-            "BASE_DIR = Path(__file__).resolve().parent\n\n"
-            "# Default SQLite database configuration\n"
-            "DATABASES = {\n"
-            '    "default": dj_database_url.config(\n'
-            '        default=os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/db.sqlite3"),\n'
-            "        conn_max_age=600,\n"
-            "        conn_health_checks=True,\n"
-            "    )\n"
-            "}\n\n"
-            "# --- Examples for Other Database Engines ---\n"
-            "# PostgreSQL (Production recommended):\n"
-            '# DATABASES["analytics"] = dj_database_url.parse(\n'
-            '#     os.getenv("ANALYTICS_DATABASE_URL", "postgres://user:password@localhost:5432/analytics_db"),\n'
-            "#     conn_max_age=600,\n"
-            "#     conn_health_checks=True,\n"
-            "# )\n"
-            "#\n"
-            "# MySQL / MariaDB:\n"
-            '# DATABASES["legacy"] = dj_database_url.parse(\n'
-            '#     os.getenv("LEGACY_DATABASE_URL", "mysql://user:password@localhost:3306/legacy_db"),\n'
-            "#     conn_max_age=600,\n"
-            "# )\n"
-        )
-    click.echo(click.style("Created database.py.", fg="green"))
+        if to_append:
+            with open(env_path, "a", encoding="utf-8") as f:
+                if existing_env and not existing_env.endswith("\n"):
+                    f.write("\n")
+                f.write("\n# DataMan Configuration\n" + "\n".join(to_append) + "\n")
+            click.echo(
+                click.style("Updated existing .env with DataMan settings.", fg="green")
+            )
+        else:
+            click.echo(click.style("Preserved existing .env file.", fg="green"))
+    else:
+        secret_key = secrets.token_urlsafe(50)
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(f"DATAMAN_SECRET_KEY='{secret_key}'\n")
+            f.write("DEBUG=True\n")
+            f.write("DATABASE_URL=sqlite:///db.sqlite3\n")
+            f.write("ALLOWED_HOSTS=127.0.0.1,localhost\n")
+        click.echo(click.style("Created .env file.", fg="green"))
 
-    # Create config.py
-    with open(config_file, "w") as f:
-        f.write(
-            '"""\n'
-            "DataMan Project Configuration\n"
-            "Customize global settings, security policies, CORS, pagination, and middleware.\n"
-            '"""\n'
-            "import os\n\n"
-            "# Security & Environment\n"
-            'DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")\n'
-            'ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]\n\n'
-            "# Global Pagination & Throttling\n"
-            "PAGE_SIZE = 100\n"
-            "MAX_PAGE_SIZE = 500\n\n"
-            "# Audit & Telemetry\n"
-            "ENABLE_AUDIT_LOGGING = True\n"
-            "ENABLE_TELEMETRY = True\n"
-            'TELEMETRY_BACKEND = "db"  # Options: "db" (default), "stdout", "none"\n\n'
-            "# Webhooks (pluggable queue or worker dispatcher)\n"
-            "# WEBHOOK_DISPATCHER = 'my_app.tasks.emit_webhook'\n\n"
-            "# Custom Installed Apps (e.g. third-party Django apps)\n"
-            "EXTRA_INSTALLED_APPS = []\n\n"
-            "# Custom Middleware (appended to request/response pipeline)\n"
-            "EXTRA_MIDDLEWARE = []\n"
-        )
-    click.echo(click.style("Created config.py.", fg="green"))
+    # 2. Handle database.py
+    if database_file.exists():
+        click.echo(click.style("Preserved existing database.py file.", fg="green"))
+    else:
+        with open(database_file, "w", encoding="utf-8") as f:
+            f.write(
+                '"""\n'
+                "DataMan Database Configuration\n"
+                "Configure your primary and replica database connections here.\n"
+                '"""\n'
+                "import os\n"
+                "from pathlib import Path\n"
+                "import dj_database_url\n\n"
+                "BASE_DIR = Path(__file__).resolve().parent\n\n"
+                "# Default SQLite database configuration\n"
+                "DATABASES = {\n"
+                '    "default": dj_database_url.config(\n'
+                '        default=os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/db.sqlite3"),\n'
+                "        conn_max_age=600,\n"
+                "        conn_health_checks=True,\n"
+                "    )\n"
+                "}\n\n"
+                "# --- Examples for Other Database Engines ---\n"
+                "# PostgreSQL (Production recommended):\n"
+                '# DATABASES["analytics"] = dj_database_url.parse(\n'
+                '#     os.getenv("ANALYTICS_DATABASE_URL", "postgres://user:password@localhost:5432/analytics_db"),\n'
+                "#     conn_max_age=600,\n"
+                "#     conn_health_checks=True,\n"
+                "# )\n"
+                "#\n"
+                "# MySQL / MariaDB:\n"
+                '# DATABASES["legacy"] = dj_database_url.parse(\n'
+                '#     os.getenv("LEGACY_DATABASE_URL", "mysql://user:password@localhost:3306/legacy_db"),\n'
+                "#     conn_max_age=600,\n"
+                "# )\n"
+            )
+        click.echo(click.style("Created database.py.", fg="green"))
 
-    # Create tables/ directory and migrations
+    # 3. Handle config.py
+    if config_file.exists():
+        click.echo(click.style("Preserved existing config.py file.", fg="green"))
+    else:
+        with open(config_file, "w", encoding="utf-8") as f:
+            f.write(
+                '"""\n'
+                "DataMan Project Configuration\n"
+                "Customize global settings, security policies, CORS, pagination, and middleware.\n"
+                '"""\n'
+                "import os\n\n"
+                "# Security & Environment\n"
+                'DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")\n'
+                'ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]\n\n'
+                "# Global Pagination & Throttling\n"
+                "PAGE_SIZE = 100\n"
+                "MAX_PAGE_SIZE = 500\n\n"
+                "# Audit & Telemetry\n"
+                "ENABLE_AUDIT_LOGGING = True\n"
+                "ENABLE_TELEMETRY = True\n"
+                'TELEMETRY_BACKEND = "db"  # Options: "db" (default), "stdout", "none"\n\n'
+                "# Webhooks (pluggable queue or worker dispatcher)\n"
+                "# WEBHOOK_DISPATCHER = 'my_app.tasks.emit_webhook'\n\n"
+                "# Custom Installed Apps (e.g. third-party Django apps)\n"
+                "EXTRA_INSTALLED_APPS = []\n\n"
+                "# Custom Middleware (appended to request/response pipeline)\n"
+                "EXTRA_MIDDLEWARE = []\n"
+            )
+        click.echo(click.style("Created config.py.", fg="green"))
+
+    # 4. Create tables/ directory and migrations
     tables_dir.mkdir(exist_ok=True)
     (tables_dir / "__init__.py").touch()
     migrations_dir.mkdir(exist_ok=True)
