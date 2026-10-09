@@ -1,13 +1,74 @@
 import contextlib
 import importlib
+import logging
 import secrets
 import sys
 from pathlib import Path
+from typing import Any
 
 from django.db import models
 
+logger = logging.getLogger("dataman.core.models")
+
 # Registry of discovered tables, their databases, and module prefixes
-TABLE_REGISTRY: dict[str, dict] = {}
+TABLE_REGISTRY: dict[Any, dict] = {}
+
+
+def get_table_registry_entry(
+    name_or_tuple: Any, database: str | None = None
+) -> dict | None:
+    """
+    Resolves a table entry from TABLE_REGISTRY.
+    Accepts:
+      - (database_alias, model_label) tuple
+      - namespaced string: 'database-table' or 'database:table'
+      - unqualified string (returns entry ONLY if uniquely defined across all databases)
+    """
+    if isinstance(name_or_tuple, tuple) and len(name_or_tuple) == 2:
+        db, tbl = name_or_tuple
+        return TABLE_REGISTRY.get((str(db).lower(), str(tbl).lower()))
+
+    if database:
+        return TABLE_REGISTRY.get((str(database).lower(), str(name_or_tuple).lower()))
+
+    name_str = str(name_or_tuple).strip()
+    if "-" in name_str:
+        db_part, tbl_part = name_str.split("-", 1)
+        found = TABLE_REGISTRY.get((db_part.lower(), tbl_part.lower()))
+        if found:
+            return found
+    if ":" in name_str:
+        db_part, tbl_part = name_str.split(":", 1)
+        found = TABLE_REGISTRY.get((db_part.lower(), tbl_part.lower()))
+        if found:
+            return found
+
+    # Check direct exact key
+    if name_str in TABLE_REGISTRY:
+        return TABLE_REGISTRY[name_str]
+    if name_str.lower() in TABLE_REGISTRY:
+        return TABLE_REGISTRY[name_str.lower()]
+
+    # Search canonical entries for matches
+    matches = []
+    for k, entry in TABLE_REGISTRY.items():
+        if (
+            isinstance(k, tuple)
+            and len(k) == 2
+            and (
+                k[1] == name_str.lower()
+                or entry.get("model_name", "").lower() == name_str.lower()
+            )
+        ):
+            matches.append(entry)
+
+    unique_matches = {e["canonical_key"]: e for e in matches if "canonical_key" in e}
+    if len(unique_matches) == 1:
+        return next(iter(unique_matches.values()))
+
+    # Ambiguous or not found
+    return None
+
 
 RESERVED_ROOT_DIRS = {
     ".agents",
@@ -140,6 +201,7 @@ def _discover_and_load_models():
                     ("default", tbl_dir.name, f"tables.{tbl_dir.name}")
                 )
 
+    discovered_entries: list[dict] = []
     for db_name, tbl_name, module_prefix in discovered_candidates:
         models_module_name = f"{module_prefix}.models"
         try:
@@ -160,18 +222,51 @@ def _discover_and_load_models():
                             target_db = str(cfg_mod.DATABASE)
 
                     attr._dataman_db = target_db
+                    canonical_key = (target_db.lower(), tbl_name.lower())
                     entry = {
                         "database": target_db,
                         "table_name": tbl_name,
+                        "model_name": attr.__name__,
                         "module_prefix": module_prefix,
                         "model": attr,
+                        "canonical_key": canonical_key,
                     }
-                    TABLE_REGISTRY[attr.__name__] = entry
-                    TABLE_REGISTRY[attr.__name__.lower()] = entry
-                    TABLE_REGISTRY[tbl_name.lower()] = entry
-                    TABLE_REGISTRY[f"{target_db}-{tbl_name.lower()}"] = entry
+                    discovered_entries.append(entry)
         except Exception as e:
-            print(f"Failed to load model from {models_module_name}: {e}")
+            logger.error(
+                f"Failed to load model from {models_module_name}: {e}",
+                exc_info=True,
+            )
+
+    # Count occurrences across databases to detect ambiguous names
+    name_to_dbs: dict[str, set[str]] = {}
+    for entry in discovered_entries:
+        db = entry["database"].lower()
+        t_name = entry["table_name"].lower()
+        m_name = entry["model_name"].lower()
+        name_to_dbs.setdefault(t_name, set()).add(db)
+        name_to_dbs.setdefault(m_name, set()).add(db)
+
+    for entry in discovered_entries:
+        target_db = entry["database"].lower()
+        tbl_name = entry["table_name"].lower()
+        model_name = entry["model_name"]
+        canonical_key = entry["canonical_key"]
+
+        # Canonical tuple keys: (database_alias, model_label)
+        TABLE_REGISTRY[canonical_key] = entry
+        TABLE_REGISTRY[(target_db, model_name.lower())] = entry
+        TABLE_REGISTRY[f"{target_db}-{tbl_name}"] = entry
+        TABLE_REGISTRY[f"{target_db}:{tbl_name}"] = entry
+        TABLE_REGISTRY[f"{target_db}-{model_name.lower()}"] = entry
+        TABLE_REGISTRY[f"{target_db}:{model_name.lower()}"] = entry
+
+        # Unqualified lookup is allowed ONLY when unique across databases
+        if len(name_to_dbs.get(tbl_name, set())) == 1:
+            TABLE_REGISTRY[tbl_name] = entry
+        if len(name_to_dbs.get(model_name.lower(), set())) == 1:
+            TABLE_REGISTRY[model_name] = entry
+            TABLE_REGISTRY[model_name.lower()] = entry
 
 
 _discover_and_load_models()

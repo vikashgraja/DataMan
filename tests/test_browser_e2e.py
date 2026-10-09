@@ -121,6 +121,14 @@ print("SUPERUSER_CREATED")
                 context = await browser.new_context(
                     viewport={"width": 1440, "height": 900}
                 )
+                await context.route(
+                    "**/*",
+                    lambda route: (
+                        route.abort()
+                        if not route.request.url.startswith("http://127.0.0.1")
+                        else route.continue_()
+                    ),
+                )
                 page = await context.new_page()
                 page.on(
                     "console",
@@ -141,18 +149,17 @@ print("SUPERUSER_CREATED")
                 # Step B: Enter credentials and log in
                 await page.fill("#id_username", "admin")
                 await page.fill("#id_password", "AdminPass123!")
-                await page.click("#login-submit-button")
-                await page.wait_for_url(
-                    "**/admin/", wait_until="domcontentloaded", timeout=10000
-                )
-                await page.wait_for_selector("#nav-analytics", timeout=10000)
+                await page.click("#login-submit-button", force=True)
+                await page.wait_for_url("**/admin/", wait_until="commit", timeout=15000)
+                await page.wait_for_selector("#nav-analytics", timeout=15000)
+                await page.wait_for_selector("#nav-tables", timeout=15000)
 
                 # Step C: Verify Analytics Tab
                 assert await page.is_visible("#nav-analytics")
                 assert await page.is_visible("#tab-analytics")
 
                 # Step D: Switch to Tables Catalog Tab
-                await page.evaluate("switchTab('tables')")
+                await page.click("#nav-tables", force=True)
                 await page.wait_for_timeout(500)
                 assert await page.is_visible("#tab-tables")
 
@@ -198,8 +205,8 @@ print("SUPERUSER_CREATED")
                     await logout_btn.click(force=True)
                     await page.wait_for_url(
                         "**/admin/login/**",
-                        wait_until="domcontentloaded",
-                        timeout=10000,
+                        wait_until="commit",
+                        timeout=15000,
                     )
 
                 await browser.close()

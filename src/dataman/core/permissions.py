@@ -63,30 +63,33 @@ class HasTableScope(permissions.BasePermission):
 
         from dataman.core.models import TABLE_REGISTRY
 
-        clean_table = table_name.split("-")[-1]
-        required_scope = f"{clean_table}:{action}"
-        namespaced_scope = f"{table_name}:{action}"
+        if "-" in table_name:
+            db_name, clean_table = table_name.split("-", 1)
+        elif ":" in table_name:
+            db_name, clean_table = table_name.split(":", 1)
+        else:
+            db_name = "default"
+            clean_table = table_name
 
+        required_scope = f"{db_name}:{clean_table}:{action}"
         possible_scopes = {
             required_scope,
-            namespaced_scope,
-            f"{clean_table}:*",
-            f"{table_name}:*",
+            f"{db_name}:{clean_table}:*",
+            f"{db_name}-{clean_table}:{action}",
+            f"{db_name}-{clean_table}:*",
+            f"{db_name}:{action}",
+            f"{db_name}:*",
         }
 
-        reg_entry = TABLE_REGISTRY.get(table_name) or TABLE_REGISTRY.get(clean_table)
-        if reg_entry and "database" in reg_entry:
-            db_name = reg_entry["database"]
-            possible_scopes.update(
-                {
-                    f"{db_name}-{clean_table}:{action}",
-                    f"{db_name}-{clean_table}:*",
-                    f"{db_name}:{clean_table}:{action}",
-                    f"{db_name}:{clean_table}:*",
-                    f"{db_name}:{action}",
-                    f"{db_name}:*",
-                }
-            )
+        # Allow unqualified scopes ONLY when the table/model is unique across all databases
+        matching_dbs = {
+            k[0]
+            for k in TABLE_REGISTRY
+            if isinstance(k, tuple) and len(k) == 2 and k[1] == clean_table.lower()
+        }
+        if len(matching_dbs) <= 1:
+            possible_scopes.add(f"{clean_table}:{action}")
+            possible_scopes.add(f"{clean_table}:*")
 
         if "*" in token.scopes:
             return True

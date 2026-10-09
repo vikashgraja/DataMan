@@ -136,6 +136,10 @@ FILTER_FIELDS = {
 }
 SEARCH_FIELDS = ["^name", "^email"]  # Prefix seek for optimal B-Tree index utilization
 ORDERING_FIELDS = ["created_at", "price"]
+
+# Schema Field Policies & Mass-Assignment Protection
+READ_ONLY_FIELDS = ["is_staff", "internal_status"]  # Protected from writes
+WRITE_ONLY_FIELDS = ["plain_password"]  # Never exposed on GET responses
 ```
 
 ### 2. Authentication & Scoped Access Tokens
@@ -163,7 +167,7 @@ def validate_customer(data):
 ```
 
 ### 4. `service.py` (Pre/Post Lifecycle Hooks)
-Run transactional business logic before or after database commits (`before_create`, `after_create`, `before_update`, `after_update`, `before_destroy`, `after_destroy`):
+Run transactional business logic within atomic database blocks (`transaction.atomic()`). Use `select_for_update()` for concurrency-safe row locking:
 ```python
 # tables/Order/service.py
 from rest_framework.exceptions import ValidationError
@@ -171,7 +175,8 @@ from tables.Product.models import Product
 
 
 def before_create(data):
-    product = Product.objects.get(id=data["product"])
+    # Locks product row inside DataMan's active transaction to eliminate race conditions
+    product = Product.objects.select_for_update().get(id=data["product"])
     quantity = int(data.get("quantity", 1))
     if product.stock_quantity < quantity:
         raise ValidationError({"quantity": "Insufficient inventory available."})

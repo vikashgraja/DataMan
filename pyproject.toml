@@ -117,5 +117,5 @@ runner = uv-venv-runner
 dependency_groups =
     dev
 commands =
-    pytest {posargs}
+    pytest --basetemp="{env_tmp_dir}/t" {posargs}
 """

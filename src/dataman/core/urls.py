@@ -1,13 +1,19 @@
 import concurrent.futures
 import contextlib
 import importlib
+import ipaddress
 import logging
+import socket
+import uuid
+from urllib.parse import urlparse
 
 import requests
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import views as auth_views
+from django.db import transaction
 from django.urls import include, path
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -44,27 +50,91 @@ router = routers.DefaultRouter()
 webhook_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 
+def is_safe_webhook_url(url: str) -> bool:
+    """
+    Validates webhook URL against SSRF attacks.
+    Rejects non-HTTP/HTTPS schemes and private/internal IP ranges unless explicitly allowed.
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+
+        allow_local = getattr(
+            settings, "WEBHOOK_ALLOW_LOCAL", getattr(settings, "DEBUG", False)
+        )
+        if allow_local:
+            return True
+
+        if hostname.lower() in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):  # nosec B104
+            return False
+
+        ip_str = socket.gethostbyname(hostname)
+        ip = ipaddress.ip_address(ip_str)
+        return not (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+        )
+    except Exception:
+        return False
+
+
 def default_webhook_dispatcher(url, action, table_name, data):
-    """Default in-process background worker for HTTP webhook delivery with retries."""
+    """Default in-process background worker for HTTP webhook delivery with retries and idempotency."""
+    if not is_safe_webhook_url(url):
+        logging.getLogger("dataman.webhooks").warning(
+            f"Blocked unsafe webhook URL: {url} for table {table_name}"
+        )
+        return
+
+    event_id = str(uuid.uuid4())
+    payload = {
+        "event_id": event_id,
+        "action": action,
+        "table": table_name,
+        "timestamp": timezone.now().isoformat(),
+        "data": data,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "X-DataMan-Event-Id": event_id,
+        "X-DataMan-Event-Action": action,
+        "X-DataMan-Table": table_name,
+        "Idempotency-Key": event_id,
+    }
 
     def _fire():
         try:
             session = requests.Session()
             retry = Retry(
-                total=3, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504]
+                total=3,
+                backoff_factor=0.5,
+                status_forcelist=[500, 502, 503, 504],
+                raise_on_status=False,
             )
             adapter = HTTPAdapter(max_retries=retry)
             session.mount("http://", adapter)
             session.mount("https://", adapter)
 
-            session.post(
+            resp = session.post(
                 url,
-                json={"action": action, "table": table_name, "data": data},
-                timeout=5,
+                json=payload,
+                headers=headers,
+                timeout=(3.0, 5.0),
             )
+            if resp.status_code >= 400:
+                logging.getLogger("dataman.webhooks").warning(
+                    f"Webhook delivery failed [{resp.status_code}] for {table_name} to {url} (event {event_id})"
+                )
         except Exception as e:
             logging.getLogger("dataman.webhooks").error(
-                f"Webhook error for {table_name}: {e}"
+                f"Webhook error for {table_name} (event {event_id}): {e}"
             )
 
     webhook_executor.submit(_fire)
@@ -115,30 +185,48 @@ def dispatch_webhook(urls, action, table_name, data, custom_dispatcher=None):
 
 try:
     models_to_process = []
-    for entry in TABLE_REGISTRY.values():
-        m = entry.get("model")
-        if m and m not in models_to_process:
-            models_to_process.append(m)
+    seen_canonicals = set()
+
+    for k, entry in list(TABLE_REGISTRY.items()):
+        if isinstance(k, tuple) and len(k) == 2:
+            m = entry.get("model")
+            db = entry.get("database", "default").lower()
+            t_name = entry.get("table_name", "").lower()
+            if m and (db, t_name) not in seen_canonicals:
+                seen_canonicals.add((db, t_name))
+                models_to_process.append((entry, m))
 
     for app_name in ("tables", "dataman", "dataman_core"):
         try:
             app_cfg = apps.get_app_config(app_name)
             for model in app_cfg.get_models():
-                if (
-                    model.__name__ not in ("APIToken", "APILog", "AuditLog")
-                    and model not in models_to_process
-                ):
-                    models_to_process.append(model)
+                m_name = getattr(model, "__name__", "")
+                if m_name in ("APIToken", "APILog", "AuditLog"):
+                    continue
+                db = getattr(model, "_dataman_db", "default").lower()
+                if (db, m_name.lower()) not in seen_canonicals:
+                    seen_canonicals.add((db, m_name.lower()))
+                    models_to_process.append(
+                        (
+                            {
+                                "database": db,
+                                "table_name": m_name,
+                                "model_name": m_name,
+                                "module_prefix": f"tables.{m_name}",
+                                "model": model,
+                            },
+                            model,
+                        )
+                    )
         except LookupError:
             pass
 
-    for model in models_to_process:
+    for table_entry, model in models_to_process:
         try:
             model_name = getattr(model, "__name__", None)
             if not model_name or model_name in ("APIToken", "APILog", "AuditLog"):
                 continue
 
-            table_entry = TABLE_REGISTRY.get(model_name, {})
             module_prefix = table_entry.get("module_prefix", f"tables.{model_name}")
             db_name = table_entry.get(
                 "database", getattr(model, "_dataman_db", "default")
@@ -157,6 +245,11 @@ try:
             depth = None
             masked_fields = {}
             unmask_scopes = [f"{model_name.lower()}:unmask"]
+            explicit_fields = None
+            read_only_fields = []
+            write_only_fields = []
+            excluded_fields = set()
+
             with contextlib.suppress(ModuleNotFoundError):
                 config_module = importlib.import_module(f"{module_prefix}.config")
                 if hasattr(config_module, "ALLOWED_OPERATIONS"):
@@ -185,6 +278,16 @@ try:
                     masked_fields = config_module.MASKED_FIELDS
                 if hasattr(config_module, "UNMASK_SCOPES"):
                     unmask_scopes = config_module.UNMASK_SCOPES
+                if hasattr(config_module, "FIELDS"):
+                    explicit_fields = list(config_module.FIELDS)
+                if hasattr(config_module, "READ_ONLY_FIELDS"):
+                    read_only_fields = list(config_module.READ_ONLY_FIELDS)
+                if hasattr(config_module, "WRITE_ONLY_FIELDS"):
+                    write_only_fields = list(config_module.WRITE_ONLY_FIELDS)
+                if hasattr(config_module, "EXCLUDED_FIELDS"):
+                    excluded_fields = set(config_module.EXCLUDED_FIELDS)
+                elif hasattr(config_module, "EXCLUDE_FIELDS"):
+                    excluded_fields = set(config_module.EXCLUDE_FIELDS)
 
             http_methods = ["options"]
             if "C" in ops:
@@ -278,9 +381,37 @@ try:
 
                 return rep
 
+            all_model_field_names = [f.name for f in model._meta.fields]
+            if explicit_fields is not None:
+                serializer_fields = [
+                    f for f in explicit_fields if f not in excluded_fields
+                ]
+            elif excluded_fields:
+                serializer_fields = [
+                    f for f in all_model_field_names if f not in excluded_fields
+                ]
+            else:
+                serializer_fields = "__all__"
+
+            # Auto-protect sensitive internal fields from mass assignment by default
+            default_internal_readonly = {"is_staff", "is_superuser"}
+            for int_f in default_internal_readonly:
+                if (
+                    int_f in all_model_field_names
+                    and int_f not in read_only_fields
+                    and (explicit_fields is None or int_f in explicit_fields)
+                ):
+                    read_only_fields.append(int_f)
+
+            extra_kwargs_dict = {}
+            for wf in write_only_fields:
+                extra_kwargs_dict[wf] = {"write_only": True}
+
             class Meta:
                 model = model
-                fields = "__all__"
+                fields = serializer_fields
+                read_only_fields = tuple(read_only_fields) if read_only_fields else ()
+                extra_kwargs = extra_kwargs_dict
 
             serializer_class = type(
                 f"{model_name}Serializer",
@@ -293,12 +424,27 @@ try:
             )
 
             read_serializer_class = serializer_class
-            if depth is not None and depth > 0:
+            if (depth is not None and depth > 0) or write_only_fields:
+                effective_depth = (
+                    min(int(depth), 3) if (depth is not None and depth > 0) else 0
+                )
+
+                read_fields = serializer_fields
+                if isinstance(serializer_fields, list):
+                    read_fields = [
+                        f for f in serializer_fields if f not in write_only_fields
+                    ]
+                elif write_only_fields:
+                    read_fields = [
+                        f
+                        for f in all_model_field_names
+                        if f not in write_only_fields and f not in excluded_fields
+                    ]
 
                 class ReadMeta:
                     model = model
-                    fields = "__all__"
-                    depth = depth
+                    fields = read_fields
+                    depth = effective_depth
 
                 read_serializer_class = type(
                     f"{model_name}ReadSerializer",
@@ -323,104 +469,154 @@ try:
 
             # Viewset service hooks
             def make_hooks(s_mod, w_urls, t_name, d_name, w_disp=None):
+                target_db = d_name or "default"
+
                 def _create(self, serializer):
-                    if s_mod and hasattr(s_mod, "before_create"):
-                        s_mod.before_create(serializer.validated_data)
+                    with transaction.atomic(using=target_db):
+                        if s_mod and hasattr(s_mod, "before_create"):
+                            mutated = s_mod.before_create(serializer.validated_data)
+                            if isinstance(mutated, dict):
+                                serializer.validated_data.update(mutated)
 
-                    instance = serializer.save()
+                        instance = serializer.save()
 
-                    if s_mod and hasattr(s_mod, "after_create"):
-                        s_mod.after_create(instance)
+                        if s_mod and hasattr(s_mod, "after_create"):
+                            s_mod.after_create(instance)
 
-                    log_audit_event(
-                        event_type="RECORD_CREATED",
-                        request=getattr(self, "request", None),
-                        details={
-                            "table": t_name,
-                            "database": d_name,
-                            "id": getattr(instance, "id", None),
-                            "data": serializer.data,
-                        },
-                        severity="INFO",
-                        status_code=201,
-                    )
-
-                    if w_urls:
-                        data = (
-                            serializer.data
-                            if isinstance(serializer.data, list)
-                            else [serializer.data]
-                        )
-                        for item in data:
-                            dispatch_webhook(
-                                w_urls, "create", t_name, item, custom_dispatcher=w_disp
+                        if s_mod and hasattr(s_mod, "after_commit"):
+                            transaction.on_commit(
+                                lambda inst=instance: s_mod.after_commit(inst),
+                                using=target_db,
                             )
 
+                        log_audit_event(
+                            event_type="RECORD_CREATED",
+                            request=getattr(self, "request", None),
+                            details={
+                                "table": t_name,
+                                "database": target_db,
+                                "id": getattr(instance, "id", None),
+                                "data": serializer.data,
+                            },
+                            severity="INFO",
+                            status_code=201,
+                        )
+
+                        if w_urls:
+                            payloads = (
+                                serializer.data
+                                if isinstance(serializer.data, list)
+                                else [serializer.data]
+                            )
+
+                            def _fire_create(
+                                urls=w_urls, tbl=t_name, data=payloads, disp=w_disp
+                            ):
+                                for item in data:
+                                    dispatch_webhook(
+                                        urls,
+                                        "create",
+                                        tbl,
+                                        item,
+                                        custom_dispatcher=disp,
+                                    )
+
+                            transaction.on_commit(_fire_create, using=target_db)
+
                 def _update(self, serializer):
-                    if s_mod and hasattr(s_mod, "before_update"):
-                        s_mod.before_update(
-                            serializer.instance, serializer.validated_data
+                    with transaction.atomic(using=target_db):
+                        if s_mod and hasattr(s_mod, "before_update"):
+                            mutated = s_mod.before_update(
+                                serializer.instance, serializer.validated_data
+                            )
+                            if isinstance(mutated, dict):
+                                serializer.validated_data.update(mutated)
+
+                        instance = serializer.save()
+
+                        if s_mod and hasattr(s_mod, "after_update"):
+                            s_mod.after_update(instance)
+
+                        if s_mod and hasattr(s_mod, "after_commit"):
+                            transaction.on_commit(
+                                lambda inst=instance: s_mod.after_commit(inst),
+                                using=target_db,
+                            )
+
+                        log_audit_event(
+                            event_type="RECORD_UPDATED",
+                            request=getattr(self, "request", None),
+                            details={
+                                "table": t_name,
+                                "database": target_db,
+                                "id": getattr(instance, "id", None),
+                                "data": serializer.data,
+                            },
+                            severity="INFO",
+                            status_code=200,
                         )
 
-                    instance = serializer.save()
+                        if w_urls:
+                            update_data = serializer.data
 
-                    if s_mod and hasattr(s_mod, "after_update"):
-                        s_mod.after_update(instance)
+                            def _fire_update(
+                                urls=w_urls, tbl=t_name, data=update_data, disp=w_disp
+                            ):
+                                dispatch_webhook(
+                                    urls,
+                                    "update",
+                                    tbl,
+                                    data,
+                                    custom_dispatcher=disp,
+                                )
 
-                    log_audit_event(
-                        event_type="RECORD_UPDATED",
-                        request=getattr(self, "request", None),
-                        details={
-                            "table": t_name,
-                            "database": d_name,
-                            "id": getattr(instance, "id", None),
-                            "data": serializer.data,
-                        },
-                        severity="INFO",
-                        status_code=200,
-                    )
-
-                    if w_urls:
-                        dispatch_webhook(
-                            w_urls,
-                            "update",
-                            t_name,
-                            serializer.data,
-                            custom_dispatcher=w_disp,
-                        )
+                            transaction.on_commit(_fire_update, using=target_db)
 
                 def _destroy(self, instance):
                     instance_id = getattr(instance, "id", None)
                     data_to_send = {"id": instance_id} if w_urls else None
 
-                    if s_mod and hasattr(s_mod, "before_destroy"):
-                        s_mod.before_destroy(instance)
+                    with transaction.atomic(using=target_db):
+                        if s_mod and hasattr(s_mod, "before_destroy"):
+                            s_mod.before_destroy(instance)
 
-                    viewsets.ModelViewSet.perform_destroy(self, instance)
+                        viewsets.ModelViewSet.perform_destroy(self, instance)
 
-                    if s_mod and hasattr(s_mod, "after_destroy"):
-                        s_mod.after_destroy(instance)
+                        if s_mod and hasattr(s_mod, "after_destroy"):
+                            s_mod.after_destroy(instance)
 
-                    log_audit_event(
-                        event_type="RECORD_DELETED",
-                        request=getattr(self, "request", None),
-                        details={
-                            "table": t_name,
-                            "database": d_name,
-                            "id": instance_id,
-                        },
-                        severity="WARNING",
-                        status_code=204,
-                    )
+                        if s_mod and hasattr(s_mod, "after_commit"):
+                            transaction.on_commit(
+                                lambda i_id=instance_id: s_mod.after_commit(i_id),
+                                using=target_db,
+                            )
 
-                    if w_urls:
-                        dispatch_webhook(
-                            w_urls,
-                            "destroy",
-                            t_name,
-                            data_to_send,
-                            custom_dispatcher=w_disp,
+                        log_audit_event(
+                            event_type="RECORD_DELETED",
+                            request=getattr(self, "request", None),
+                            details={
+                                "table": t_name,
+                                "database": target_db,
+                                "id": instance_id,
+                            },
+                            severity="WARNING",
+                            status_code=204,
                         )
+
+                        if w_urls:
+
+                            def _fire_destroy(
+                                urls=w_urls, tbl=t_name, data=data_to_send, disp=w_disp
+                            ):
+                                dispatch_webhook(
+                                    urls,
+                                    "destroy",
+                                    tbl,
+                                    data,
+                                    custom_dispatcher=disp,
+                                )
+
+                            transaction.on_commit(_fire_destroy, using=target_db)
 
                 return _create, _update, _destroy
 
@@ -444,20 +640,27 @@ try:
                 "perform_destroy": custom_perform_destroy,
             }
 
-            def custom_get_queryset(self, m=model, d=depth):
+            def custom_get_queryset(self, m=model, d=depth, s_fields=serializer_fields):
                 qs = m.objects.all()
                 if d is not None and d > 0:
+                    exposed = (
+                        s_fields
+                        if isinstance(s_fields, list)
+                        else [f.name for f in m._meta.fields]
+                    )
                     fk_fields = [
                         f.name
                         for f in m._meta.fields
-                        if f.is_relation and (f.many_to_one or f.one_to_one)
+                        if f.is_relation
+                        and (f.many_to_one or f.one_to_one)
+                        and f.name in exposed
                     ]
                     if fk_fields:
                         qs = qs.select_related(*fk_fields)
                     reverse_rel_fields = [
                         f.get_accessor_name()
                         for f in m._meta.related_objects
-                        if f.get_accessor_name()
+                        if f.get_accessor_name() and f.get_accessor_name() in exposed
                     ]
                     if reverse_rel_fields:
                         qs = qs.prefetch_related(*reverse_rel_fields)
@@ -465,7 +668,7 @@ try:
 
             viewset_attrs["get_queryset"] = custom_get_queryset
 
-            if depth is not None and depth > 0:
+            if (depth is not None and depth > 0) or write_only_fields:
 
                 def custom_get_serializer_class(
                     self, r_class=read_serializer_class, w_class=serializer_class
@@ -500,10 +703,7 @@ try:
                     @property
                     def count(self):
                         if self._count is None:
-                            try:
-                                self._count = self.object_list.count()
-                            except Exception:
-                                self._count = 0
+                            self._count = self.object_list.count()
                         return self._count
 
                     @property

@@ -1,3 +1,4 @@
+import contextlib
 import os
 import sys
 from pathlib import Path
@@ -31,7 +32,6 @@ def setup():
         or databases_dir.exists()
     )
 
-    # Ensure migrations directory exists only in initialized projects
     migration_modules_dict = {
         "dataman_core": "dataman.core.migrations",
         "dataman": "dataman.core.migrations",
@@ -50,6 +50,59 @@ def setup():
         migrations_dir.mkdir(parents=True, exist_ok=True)
         (migrations_dir / "__init__.py").touch()
         migration_modules_dict["tables"] = "migrations"
+
+    reserved_root_dirs = {
+        ".agents",
+        ".git",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".system_generated",
+        ".venv",
+        "benchmark",
+        "benchmarks",
+        "build",
+        "coverage_hack",
+        "dist",
+        "migrations",
+        "scratch",
+        "src",
+        "tests",
+        "__pycache__",
+        "tables",
+        "databases",
+    }
+    extra_db_apps = []
+    for item in cwd.iterdir():
+        if (
+            item.is_dir()
+            and not item.name.startswith((".", "_"))
+            and item.name not in reserved_root_dirs
+        ):
+            has_models = any(
+                sub.is_dir() and (sub / "models.py").exists() for sub in item.iterdir()
+            )
+            if has_models or (item / "__init__.py").exists():
+                extra_db_apps.append(item.name)
+                mig_dir = item / "migrations"
+                if is_project and not mig_dir.exists():
+                    mig_dir.mkdir(parents=True, exist_ok=True)
+                    (mig_dir / "__init__.py").touch()
+                if mig_dir.exists():
+                    migration_modules_dict[item.name] = f"{item.name}.migrations"
+
+    if databases_dir.exists() and databases_dir.is_dir():
+        for db_dir in databases_dir.iterdir():
+            if db_dir.is_dir() and not db_dir.name.startswith((".", "_")):
+                db_app_name = f"databases.{db_dir.name}"
+                extra_db_apps.append(db_app_name)
+                mig_dir = db_dir / "migrations"
+                if is_project and not mig_dir.exists():
+                    mig_dir.mkdir(parents=True, exist_ok=True)
+                    (mig_dir / "__init__.py").touch()
+                if mig_dir.exists():
+                    migration_modules_dict[db_app_name] = (
+                        f"databases.{db_dir.name}.migrations"
+                    )
 
     import dj_database_url
 
@@ -73,6 +126,11 @@ def setup():
                 conn_max_age=600,
             )
         }
+
+    for db_cfg in databases_config.values():
+        if "sqlite" in db_cfg.get("ENGINE", ""):
+            db_cfg["CONN_MAX_AGE"] = 0
+            db_cfg.setdefault("OPTIONS", {})["timeout"] = 30
 
     # 2. Load project configuration from config.py
     project_config = None
@@ -128,6 +186,9 @@ def setup():
     ]
     if tables_dir.exists():
         installed_apps.append("tables")
+    for app in extra_db_apps:
+        if app not in installed_apps:
+            installed_apps.append(app)
     installed_apps.extend(extra_apps)
 
     middleware = [
@@ -193,6 +254,18 @@ def setup():
     )
 
     django.setup()
+
+    from django.db.backends.signals import connection_created
+
+    def _configure_sqlite(sender, connection, **kwargs):
+        if connection.vendor == "sqlite":
+            with contextlib.suppress(Exception), connection.cursor() as cursor:
+                cursor.execute("PRAGMA busy_timeout=30000;")
+                name = connection.settings_dict.get("NAME", "")
+                if name and name != ":memory:":
+                    cursor.execute("PRAGMA journal_mode=WAL;")
+
+    connection_created.connect(_configure_sqlite, dispatch_uid="dataman_sqlite_wal")
 
 
 def get_asgi_application():

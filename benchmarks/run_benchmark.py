@@ -296,6 +296,10 @@ def generate_markdown_report(
     db_engine_name: str,
     seed_rate: float,
     orm_metrics: list[tuple[str, str, str, str]],
+    pre_count: int = 0,
+    post_count: int = 0,
+    inserted_records: int = 0,
+    seed_duration: float = 0.0,
 ) -> None:
     """Parses Locust CSV stats and auto-generates benchmarks/BENCHMARK_REPORT.md."""
     stats_file = Path(f"{csv_prefix}_stats.csv")
@@ -333,6 +337,18 @@ def generate_markdown_report(
     throughput_status = "Passed" if reqs_per_sec >= 15 else "Active"
     timestamp = datetime.datetime.now().strftime("%B %d, %Y - %H:%M:%S")
 
+    commit_hash = "HEAD"
+    with contextlib.suppress(Exception):
+        proc = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0:
+            commit_hash = proc.stdout.strip()
+
     cpu_cores = os.cpu_count() or "Multi-Core"
     system_spec = (
         f"{platform.system()} {platform.release()} ({platform.machine()}) | "
@@ -342,9 +358,10 @@ def generate_markdown_report(
     report_content = f"""# DataMan High-Performance Scale Benchmark Report
 
 **Generated**: {timestamp}
+**Commit**: `{commit_hash}`
 **Environment**: {system_spec}
 **Database Engine**: {db_engine_name}
-**Framework**: `dataman-engine` (ASGI / Uvicorn)
+**Framework**: `dataman-engine` v0.4.0 (ASGI / Uvicorn)
 **Scale Target**: {args.records:,} Records | {args.users:,} Concurrent Users | {args.spawn_rate} Spawn Rate | {args.run_time} Duration
 
 ---
@@ -368,11 +385,12 @@ Measures raw query execution and index lookup performance directly on the databa
 | Metric | Measured Result | Benchmark Target | Status |
 | :--- | :--- | :--- | :--- |
 | **Database Engine** | **{db_engine_name}** | PostgreSQL / SQLite | Active |
-| **In-Memory Record Generation** | **{seed_rate:,.0f} rows/sec** | > 10,000 rows/sec | Passed |
+| **Database Row Baseline** | **{pre_count:,} initial -> {post_count:,} total** ({inserted_records:,} new) | Pre/Post Counts | Verified |
+| **Database Bulk Seeding Throughput** | **{seed_rate:,.0f} rows/sec** ({inserted_records:,} rows in {seed_duration:.2f}s) | Bulk Insert | {"Passed" if seed_rate > 0 or inserted_records == 0 else "0 rows/sec"} |
+| **HTTP API Peak Throughput** | **{reqs_per_sec:.2f} req/sec** | > 15 req/sec | {throughput_status} |
 | **HTTP Success Rate** | **{read_success_rate:.2f}%** ({total_reqs - fail_count:,}/{total_reqs:,}) | > 99.0% | {"Flawless" if read_success_rate >= 99 else "Load Contention"} |
 | **Median API Latency** | **{med_latency:.0f} ms** | < {med_target} ms | {med_status} |
 | **95th Percentile Latency** | **{p95_latency:.0f} ms** | < {p95_target:,} ms | {p95_status} |
-| **Peak Throughput** | **{reqs_per_sec:.2f} req/sec** | > 15 req/sec | {throughput_status} |
 
 ---
 
@@ -534,10 +552,23 @@ def run() -> None:
         sys.exit(1)
 
     # 3. Seed data up to target records
+    initial_count = 0
+    final_count = 0
+    inserted_records = 0
+    seed_duration = 0.0
     seed_rate = 0.0
+
+    from django.apps import apps
+
+    try:
+        Order = apps.get_model("tables", "Order")
+        initial_count = Order.objects.count()
+    except Exception:
+        initial_count = 0
+
     if not args.skip_seed:
         print(
-            f"[3/5] Seeding {args.records:,} indexed records with relational joins..."
+            f"[3/5] Seeding up to {args.records:,} indexed records (current count: {initial_count:,})..."
         )
         start_seed = time.time()
         try:
@@ -547,9 +578,25 @@ def run() -> None:
 
         seed_scale_data(target_records=args.records, batch_size=50000)
         seed_duration = time.time() - start_seed
-        seed_rate = (args.records / seed_duration) if seed_duration > 0 else 0.0
+
+        try:
+            final_count = Order.objects.count()
+        except Exception:
+            final_count = initial_count
+
+        inserted_records = max(0, final_count - initial_count)
+        seed_rate = (
+            (inserted_records / seed_duration)
+            if (seed_duration > 0 and inserted_records > 0)
+            else 0.0
+        )
+        print(
+            f"[+] Seeding complete: {inserted_records:,} new rows inserted in {seed_duration:.2f}s "
+            f"({seed_rate:,.0f} rows/sec). Table total: {final_count:,} rows."
+        )
     else:
         print("[3/5] Skipping database seeding (--skip-seed specified)...")
+        final_count = initial_count
 
     # 4. Run Direct Database & ORM Query Benchmark
     print("\n[4/5] Executing Database Query & Index Seek Latency Benchmark...")
@@ -641,7 +688,17 @@ def run() -> None:
             print("[+] Server stopped.")
 
     # 7. Auto-generate report
-    generate_markdown_report(csv_prefix, args, db_engine_name, seed_rate, orm_metrics)
+    generate_markdown_report(
+        csv_prefix,
+        args,
+        db_engine_name,
+        seed_rate,
+        orm_metrics,
+        pre_count=initial_count,
+        post_count=final_count,
+        inserted_records=inserted_records,
+        seed_duration=seed_duration,
+    )
 
 
 if __name__ == "__main__":

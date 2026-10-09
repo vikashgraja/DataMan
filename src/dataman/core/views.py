@@ -538,9 +538,10 @@ def catalog_summary(request):
 @permission_classes([IsAdminOrLocal])
 def table_records_view(request, table_name):
     """Returns paginated rows for a registered table."""
-    from dataman.core.models import TABLE_REGISTRY
+    from dataman.core.models import get_table_registry_entry
 
-    entry = TABLE_REGISTRY.get(table_name) or TABLE_REGISTRY.get(table_name.lower())
+    db_param = request.query_params.get("database")
+    entry = get_table_registry_entry(table_name, database=db_param)
     if not entry or "model" not in entry:
         return Response(
             {"error": f"Table '{table_name}' not found"},

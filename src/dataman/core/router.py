@@ -32,14 +32,25 @@ class DataManDatabaseRouter:
         with contextlib.suppress(Exception):
             from dataman.core.models import TABLE_REGISTRY
 
+            model_obj = (
+                model if isinstance(model, type) else getattr(model, "__class__", None)
+            )
+            for _k, entry in TABLE_REGISTRY.items():
+                if entry.get("model") is not None and entry.get("model") == model_obj:
+                    return entry.get("database", "default")
+
             model_name = getattr(model, "__name__", "") or (
                 getattr(model._meta, "object_name", "")
                 if hasattr(model, "_meta")
                 else ""
             )
             if model_name:
-                for reg_name, entry in TABLE_REGISTRY.items():
-                    if reg_name.lower() == model_name.lower():
+                for k, entry in TABLE_REGISTRY.items():
+                    if (
+                        isinstance(k, tuple)
+                        and k[1] == model_name.lower()
+                        or str(k).lower() == model_name.lower()
+                    ):
                         return entry.get("database", "default")
 
         return "default"
@@ -100,9 +111,29 @@ class DataManDatabaseRouter:
             with contextlib.suppress(Exception):
                 from dataman.core.models import TABLE_REGISTRY
 
+                # 1. Exact model instance match
+                if model:
+                    model_obj = (
+                        model
+                        if isinstance(model, type)
+                        else getattr(model, "__class__", None)
+                    )
+                    for _k, entry in TABLE_REGISTRY.items():
+                        if entry.get("model") == model_obj:
+                            return db == entry.get("database", "default")
+
+                # 2. Canonical tuple key match
+                canonical = TABLE_REGISTRY.get((db.lower(), target_name))
+                if canonical:
+                    return db == canonical.get("database", "default")
+
+                # 3. Key search
                 for reg_name, entry in TABLE_REGISTRY.items():
-                    if (
-                        reg_name.lower() == target_name
+                    if isinstance(reg_name, tuple):
+                        if reg_name[1] == target_name:
+                            return db == entry.get("database", "default")
+                    elif (
+                        str(reg_name).lower() == target_name
                         or entry.get("table_name", "").lower() == target_name
                     ):
                         target_db = entry.get("database", "default")

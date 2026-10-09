@@ -1,6 +1,6 @@
 # DataMan Developer Quickstart Guide
 
-Welcome to **DataMan**! This hands-on guide will take you from zero to a live, production-grade REST API backend in under 5 minutes.
+Welcome to **DataMan**! This hands-on guide will help you build a working CRUD API in five minutes.
 
 ---
 
@@ -11,7 +11,7 @@ DataMan is a headless backend engine built on top of Django and Django REST Fram
 - Zero Boilerplate: No manual serializers, views, or routing required.
 - Inject Custom Logic: Use lifecycle hooks (`service.py`) and data validators (`validation.py`).
 - Granular Token Auth: Per-table and per-operation API tokens out of the box.
-- High Concurrency: ASGI / Uvicorn support with sub-millisecond query execution.
+- High Concurrency: ASGI / Uvicorn support with measured sub-millisecond indexed query execution.
 
 ---
 
@@ -196,7 +196,7 @@ def validate_product(data):
 ```
 
 ### 2. Service Hooks (`tables/Order/service.py`)
-Run lifecycle actions (e.g., auto-decrementing product inventory upon purchase):
+Run lifecycle actions with transactional guarantees. DataMan automatically wraps create, update, and delete operations in a database transaction (`transaction.atomic()`). Use `select_for_update()` for concurrency-safe inventory operations:
 
 ```python
 from rest_framework.exceptions import ValidationError
@@ -204,7 +204,8 @@ from tables.Product.models import Product
 
 
 def before_create(data):
-    product = Product.objects.get(id=data["product"])
+    # Lock the product row within DataMan's active transaction to prevent race conditions
+    product = Product.objects.select_for_update().get(id=data["product"])
     quantity = int(data.get("quantity", 1))
 
     if product.stock_quantity < quantity:
@@ -212,7 +213,7 @@ def before_create(data):
             {"quantity": f"Only {product.stock_quantity} units available in stock."}
         )
 
-    # Decrement inventory
+    # Decrement inventory atomically; rolls back if any subsequent step fails
     product.stock_quantity -= quantity
     product.save()
     return data
