@@ -565,7 +565,11 @@ def table_records_view(request, table_name):
             }
         )
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        logger.error("Failed to query records for table %s: %s", table_name, e)
+        return Response(
+            {"error": "Failed to fetch table records."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @user_passes_test(lambda u: u.is_superuser, login_url="/admin/login/")

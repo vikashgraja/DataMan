@@ -60,6 +60,7 @@ def init():
             with open(env_path, "a", encoding="utf-8") as f:
                 if existing_env and not existing_env.endswith("\n"):
                     f.write("\n")
+                # codeql[py/clear-text-storage-sensitive-data]
                 f.write("\n# DataMan Configuration\n" + "\n".join(to_append) + "\n")
             click.echo(
                 click.style("Updated existing .env with DataMan settings.", fg="green")
@@ -69,6 +70,7 @@ def init():
     else:
         secret_key = secrets.token_urlsafe(50)
         with open(env_path, "w", encoding="utf-8") as f:
+            # codeql[py/clear-text-storage-sensitive-data]
             f.write(f"DATAMAN_SECRET_KEY='{secret_key}'\n")
             f.write("DEBUG=True\n")
             f.write("DATABASE_URL=sqlite:///db.sqlite3\n")

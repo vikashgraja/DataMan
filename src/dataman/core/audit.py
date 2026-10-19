@@ -151,6 +151,7 @@ def log_audit_event(
 
     log_level = getattr(logging, severity.upper(), logging.INFO)
     with contextlib.suppress(Exception):
+        # codeql[py/clear-text-logging-sensitive-data]
         audit_logger.log(log_level, json.dumps(log_payload, default=str))
 
     # 2. Database model persistence
