@@ -4,6 +4,7 @@
 [![Databases](https://img.shields.io/badge/Databases-PostgreSQL%20%7C%20MySQL%20%7C%20SQLite-success.svg)](#supported-databases)
 [![ASGI Engine](https://img.shields.io/badge/ASGI-Uvicorn%20Ready-purple.svg)](#asgi-production-mode)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/vikashgraja/DataMan/blob/main/LICENSE)
+[![Reviewed by HOL Guard](https://img.shields.io/badge/HOL_Guard%20|%20DataMan_command_protection-2E5AAC?logo=shield&logoColor=white)](https://hol.org/guard/extensions/command.dataman)
 
 **DataMan** is a dynamic, headless backend engine built on top of Django and Django REST Framework. It eliminates the boilerplate of writing standard CRUD APIs, routing, and serializers by allowing you to scaffold endpoints instantly from the command line while preserving your ability to inject custom business logic and strict validation whenever you need it.
 
